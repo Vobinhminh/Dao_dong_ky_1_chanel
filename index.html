@@ -13,36 +13,46 @@
             color: #333;
             font-family: sans-serif;
             margin: 0;
-            padding: 20px;
+            padding: 10px 15px;
+        }
+        h2 {
+            margin: 5px 0 10px 0;
+            font-size: 1.5rem;
         }
         canvas {
             background-color: #e6f7ff; 
             border: 3px solid #000;
             width: 100%;
-            max-width: 800px;
-            height: 50vh;
-            margin-top: 15px;
+            max-width: 1200px;
+            height: 55vh;
             border-radius: 8px;
             box-shadow: 0 4px 10px rgba(0,0,0,0.1);
         }
+        .controls-wrapper {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            max-width: 1200px;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
         .controls {
             display: flex;
-            gap: 15px;
-            margin-top: 10px;
+            gap: 10px;
             flex-wrap: wrap;
             justify-content: center;
             align-items: center;
         }
         button {
-            padding: 12px 24px;
-            font-size: 16px;
+            padding: 10px 18px;
+            font-size: 15px;
             font-weight: bold;
             cursor: pointer;
             background-color: #007bff;
             color: white;
             border: none;
             border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            box-shadow: 0 3px 5px rgba(0,0,0,0.2);
             transition: background-color 0.2s;
         }
         button:hover { background-color: #0056b3; }
@@ -52,83 +62,98 @@
             box-shadow: none;
         }
         #pauseButton {
-            background-color: #28a745; /* Màu xanh lá mặc định */
+            background-color: #28a745; 
         }
         #pauseButton:hover { filter: brightness(0.9); }
         
         .toggle-box {
             display: flex;
             align-items: center;
-            gap: 8px;
-            font-size: 15px;
+            gap: 6px;
+            font-size: 14px;
             font-weight: bold;
-            padding: 10px 15px;
+            padding: 8px 12px;
             border-radius: 8px;
             cursor: pointer;
-        }
-        .filter-toggle {
             background: #ffe6e6;
             border: 2px solid #ff9999;
         }
-        .timer-toggle {
-            background: #e6ffe6;
-            border: 2px solid #99ff99;
-        }
         .toggle-box input {
-            width: 18px;
-            height: 18px;
+            width: 16px;
+            height: 16px;
             cursor: pointer;
         }
 
         .zoom-controls {
             display: flex;
-            gap: 20px;
-            margin-top: 15px;
+            gap: 8px;
             background: #ffffff;
             border: 1px solid #ccc;
-            padding: 15px;
+            padding: 10px;
             border-radius: 8px;
-            width: 100%;
-            max-width: 770px;
-            justify-content: space-around;
+            align-items: center;
+            justify-content: center;
             flex-wrap: wrap;
         }
-        .slider-group {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 5px;
+        .zoom-controls span {
             font-weight: bold;
+            font-size: 14px;
+            margin-right: 5px;
         }
-        input[type="range"] {
-            width: 150px;
+        .zoom-btn {
+            padding: 6px 12px;
+            font-size: 14px;
+            background-color: #e0e0e0;
+            color: #333;
+            box-shadow: none;
+        }
+        .zoom-btn:hover {
+            background-color: #ccc;
+        }
+        .zoom-btn.active {
+            background-color: #ff9800; /* Màu cam nổi bật cho mức zoom đang chọn */
+            color: white;
+        }
+
+        /* ----- CSS ĐẶC BIỆT KHI XOAY NGANG ĐIỆN THOẠI (LANDSCAPE) ----- */
+        @media (orientation: landscape) {
+            body { padding: 5px 15px; }
+            h2 { display: none; } 
+            .controls-wrapper {
+                flex-direction: row; 
+                justify-content: space-between;
+                align-items: center;
+            }
+            .zoom-controls {
+                margin: 0;
+                padding: 8px 12px;
+            }
+            canvas {
+                height: 75vh; 
+                margin-top: 5px;
+            }
         }
     </style>
 </head>
 <body>
     <h2>Đo Sóng Âm Trực Tiếp</h2>
     
-    <div class="controls">
-        <button id="startButton">1. Bật Micro</button>
-        <button id="pauseButton" disabled>2. Tiếp tục</button>
-        
-        <label class="toggle-box filter-toggle">
-            <input type="checkbox" id="noiseFilter"> Bật Lọc Nhiễu
-        </label>
-        
-        <label class="toggle-box timer-toggle">
-            <input type="checkbox" id="autoStop" checked> Tự ngưng sau 0,5s
-        </label>
-    </div>
-
-    <div class="zoom-controls">
-        <div class="slider-group">
-            <label for="zoomX">Phóng to Trục X (Thời gian): <span id="valX">1x</span></label>
-            <input type="range" id="zoomX" min="1" max="10" step="0.5" value="1">
+    <div class="controls-wrapper">
+        <div class="controls">
+            <button id="startButton">1. Bật Micro</button>
+            <button id="pauseButton" disabled>2. Tiếp tục</button>
+            
+            <label class="toggle-box">
+                <input type="checkbox" id="noiseFilter"> Lọc Nhiễu
+            </label>
         </div>
-        <div class="slider-group">
-            <label for="zoomY">Phóng to Trục Y (Biên độ): <span id="valY">1x</span></label>
-            <input type="range" id="zoomY" min="1" max="10" step="0.5" value="1">
+
+        <div class="zoom-controls">
+            <span>Phóng to:</span>
+            <button class="zoom-btn active" data-zoom="1">1x</button>
+            <button class="zoom-btn" data-zoom="2">2x</button>
+            <button class="zoom-btn" data-zoom="3">3x</button>
+            <button class="zoom-btn" data-zoom="5">5x</button>
         </div>
     </div>
 
@@ -138,24 +163,32 @@
         const startButton = document.getElementById('startButton');
         const pauseButton = document.getElementById('pauseButton');
         const filterCheckbox = document.getElementById('noiseFilter');
-        const autoStopCheckbox = document.getElementById('autoStop');
         const canvas = document.getElementById('oscilloscope');
         const canvasCtx = canvas.getContext('2d');
-        
-        const zoomXSlider = document.getElementById('zoomX');
-        const zoomYSlider = document.getElementById('zoomY');
-        const valX = document.getElementById('valX');
-        const valY = document.getElementById('valY');
+        const zoomBtns = document.querySelectorAll('.zoom-btn');
 
         let audioCtx;
         let analyser;
         let highpassFilter, lowpassFilter;
-        let isPaused = true; // Bắt đầu ở trạng thái dừng chờ lệnh
+        let isPaused = true; 
         let sampleRate = 48000; 
         let stopTimer; 
+        let currentZoom = 1; // Mức zoom mặc định
 
-        zoomXSlider.addEventListener('input', (e) => valX.textContent = e.target.value + 'x');
-        zoomYSlider.addEventListener('input', (e) => valY.textContent = e.target.value + 'x');
+        // Xử lý sự kiện khi bấm nút Zoom
+        zoomBtns.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                // Bỏ đánh dấu nút cũ
+                zoomBtns.forEach(b => b.classList.remove('active'));
+                // Đánh dấu nút mới
+                e.target.classList.add('active');
+                // Lấy giá trị zoom
+                currentZoom = parseFloat(e.target.dataset.zoom);
+                
+                // Nếu đang dừng hình, vẽ lại ngay lập tức để thấy thay đổi
+                if (isPaused) drawFrame(); 
+            });
+        });
 
         filterCheckbox.addEventListener('change', (e) => {
             if (highpassFilter && lowpassFilter) {
@@ -172,18 +205,18 @@
         function resizeCanvas() {
             canvas.width = canvas.clientWidth;
             canvas.height = canvas.clientHeight;
-            drawFrame(); // Vẽ lại khung lưới kể cả khi đang dừng
+            drawFrame(); 
         }
         window.addEventListener('resize', resizeCanvas);
 
         function triggerAutoStop() {
             clearTimeout(stopTimer);
-            if (autoStopCheckbox.checked && !isPaused) {
+            if (!isPaused) {
                 stopTimer = setTimeout(() => {
                     if (!isPaused) {
                         isPaused = true;
                         pauseButton.textContent = "Tiếp tục";
-                        pauseButton.style.backgroundColor = "#28a745"; // Trở về xanh lá
+                        pauseButton.style.backgroundColor = "#28a745"; 
                     }
                 }, 500); 
             }
@@ -214,12 +247,11 @@
                 highpassFilter.connect(lowpassFilter);
                 lowpassFilter.connect(analyser);
 
-                // Chỉ khởi tạo vẽ lưới ban đầu, CHƯA thu sóng
                 isPaused = true;
                 resizeCanvas();
                 drawFrame(); 
                 
-                startButton.textContent = "Đã kết nối Micro";
+                startButton.textContent = "Đã kết nối";
                 startButton.disabled = true;
                 pauseButton.disabled = false;
                 pauseButton.textContent = "2. Tiếp tục";
@@ -230,24 +262,21 @@
 
         pauseButton.addEventListener('click', () => {
             if (isPaused) {
-                // BẮT ĐẦU THU
                 isPaused = false;
-                pauseButton.textContent = "Dừng";
-                pauseButton.style.backgroundColor = "#dc3545"; // Đỏ
+                pauseButton.textContent = "Đang thu...";
+                pauseButton.style.backgroundColor = "#dc3545"; 
                 draw(); 
                 triggerAutoStop(); 
             } else {
-                // NGƯỜI DÙNG CHỦ ĐỘNG BẤM DỪNG
                 isPaused = true;
                 clearTimeout(stopTimer); 
                 pauseButton.textContent = "Tiếp tục";
-                pauseButton.style.backgroundColor = "#28a745"; // Xanh lá
+                pauseButton.style.backgroundColor = "#28a745"; 
             }
         });
 
         function drawFrame() {
             if (!analyser) {
-                // Vẽ lưới trống nếu chưa kết nối micro
                 canvasCtx.fillStyle = '#e6f7ff'; 
                 canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
                 return;
@@ -256,13 +285,12 @@
             const bufferLength = analyser.frequencyBinCount; 
             const dataArray = new Uint8Array(bufferLength);
             
-            // Chỉ lấy dữ liệu âm thanh mới nếu KHÔNG bị dừng
             if (!isPaused) {
                 analyser.getByteTimeDomainData(dataArray);
             }
 
-            const zoomX = parseFloat(zoomXSlider.value);
-            const zoomY = parseFloat(zoomYSlider.value);
+            // Dùng 1 biến currentZoom chung cho cả trục X và trục Y
+            const zoomXY = currentZoom;
 
             canvasCtx.fillStyle = '#e6f7ff'; 
             canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
@@ -295,43 +323,44 @@
             canvasCtx.fillStyle = '#000000'; 
             canvasCtx.font = 'bold 12px Arial';
             
-            const totalTimeOnScreen = (bufferLength / sampleRate) / zoomX;
+            // Tính toán lưới trục X dựa trên mức zoom chung
+            const totalTimeOnScreen = (bufferLength / sampleRate) / zoomXY;
             const timePerGrid = totalTimeOnScreen / 10;
 
             canvasCtx.textAlign = 'center';
             canvasCtx.textBaseline = 'top';
             for(let i = 0; i <= 10; i++) {
                 if (i !== 5) {
-                    let t = (i * timePerGrid).toFixed(3);
+                    let t = (i * timePerGrid).toFixed(2);
                     canvasCtx.fillText(t + "s", i * stepX, canvas.height / 2 + 5);
                 }
             }
             
+            // Tính toán lưới trục Y dựa trên mức zoom chung
             canvasCtx.textAlign = 'left';
             canvasCtx.textBaseline = 'middle';
             for(let i = 0; i <= 8; i++) {
                 if (i !== 4) { 
                     let val = (4 - i) / 4; 
-                    let displayVal = (val / zoomY).toFixed(2); 
+                    let displayVal = (val / zoomXY).toFixed(2); 
                     canvasCtx.fillText(displayVal, canvas.width / 2 + 8, i * stepY);
                 } else {
                     canvasCtx.fillText("0", canvas.width / 2 + 8, canvas.height / 2 - 12); 
                 }
             }
 
-            // Chỉ vẽ đường sóng đỏ khi có dữ liệu thật (tránh vẽ đường ngang thẳng băng lúc mới bật mic)
             if (!isPaused || dataArray[0] !== 0) {
                 canvasCtx.lineWidth = 3; 
                 canvasCtx.strokeStyle = '#ff0000'; 
                 canvasCtx.beginPath();
 
-                const sliceWidth = (canvas.width * zoomX) / bufferLength;
+                // Áp dụng zoom cho nét vẽ
+                const sliceWidth = (canvas.width * zoomXY) / bufferLength;
                 let x = 0;
 
                 for (let i = 0; i < bufferLength; i++) {
-                    // Nếu chưa có dữ liệu (lúc mới chạy), gán mặc định đường giữa
                     const v = dataArray[i] ? dataArray[i] / 128.0 : 1.0; 
-                    const y = (v - 1.0) * zoomY * (canvas.height / 2) + (canvas.height / 2);
+                    const y = (v - 1.0) * zoomXY * (canvas.height / 2) + (canvas.height / 2);
 
                     if (i === 0) {
                         canvasCtx.moveTo(x, y);
