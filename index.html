@@ -56,21 +56,27 @@
         }
         #pauseButton:hover { background-color: #a71d2a; }
         
-        .filter-toggle {
+        .toggle-box {
             display: flex;
             align-items: center;
             gap: 8px;
-            font-size: 16px;
+            font-size: 15px;
             font-weight: bold;
-            background: #ffe6e6;
             padding: 10px 15px;
             border-radius: 8px;
-            border: 2px solid #ff9999;
             cursor: pointer;
         }
-        .filter-toggle input {
-            width: 20px;
-            height: 20px;
+        .filter-toggle {
+            background: #ffe6e6;
+            border: 2px solid #ff9999;
+        }
+        .timer-toggle {
+            background: #e6ffe6;
+            border: 2px solid #99ff99;
+        }
+        .toggle-box input {
+            width: 18px;
+            height: 18px;
             cursor: pointer;
         }
 
@@ -105,8 +111,13 @@
     <div class="controls">
         <button id="startButton">Bật Micro & Đo Sóng</button>
         <button id="pauseButton" disabled>Dừng (Pause)</button>
-        <label class="filter-toggle">
+        
+        <label class="toggle-box filter-toggle">
             <input type="checkbox" id="noiseFilter"> Bật Lọc Nhiễu
+        </label>
+        
+        <label class="toggle-box timer-toggle">
+            <input type="checkbox" id="autoStop" checked> Tự ngưng sau 0,5s
         </label>
     </div>
 
@@ -127,6 +138,7 @@
         const startButton = document.getElementById('startButton');
         const pauseButton = document.getElementById('pauseButton');
         const filterCheckbox = document.getElementById('noiseFilter');
+        const autoStopCheckbox = document.getElementById('autoStop');
         const canvas = document.getElementById('oscilloscope');
         const canvasCtx = canvas.getContext('2d');
         
@@ -139,19 +151,19 @@
         let analyser;
         let highpassFilter, lowpassFilter;
         let isPaused = false;
-        let sampleRate = 48000; // Mặc định, sẽ cập nhật khi bật mic
+        let sampleRate = 48000; 
+        let stopTimer; // Biến đếm thời gian dừng
 
         zoomXSlider.addEventListener('input', (e) => valX.textContent = e.target.value + 'x');
         zoomYSlider.addEventListener('input', (e) => valY.textContent = e.target.value + 'x');
 
-        // Xử lý bật/tắt bộ lọc nhiễu
         filterCheckbox.addEventListener('change', (e) => {
             if (highpassFilter && lowpassFilter) {
                 if (e.target.checked) {
-                    highpassFilter.type = 'highpass'; // Cắt nhiễu ù < 80Hz
-                    lowpassFilter.type = 'lowpass';   // Cắt nhiễu xì > 3000Hz
+                    highpassFilter.type = 'highpass'; 
+                    lowpassFilter.type = 'lowpass';   
                 } else {
-                    highpassFilter.type = 'allpass';  // Cho qua toàn bộ
+                    highpassFilter.type = 'allpass';  
                     lowpassFilter.type = 'allpass';
                 }
             }
@@ -164,17 +176,30 @@
         }
         window.addEventListener('resize', resizeCanvas);
 
+        // Hàm kích hoạt đếm ngược 0.5s để dừng
+        function triggerAutoStop() {
+            clearTimeout(stopTimer);
+            if (autoStopCheckbox.checked && !isPaused) {
+                stopTimer = setTimeout(() => {
+                    if (!isPaused) {
+                        isPaused = true;
+                        pauseButton.textContent = "Tiếp tục (Resume)";
+                        pauseButton.style.backgroundColor = "#28a745"; 
+                    }
+                }, 500); // 500ms = 0.5s
+            }
+        }
+
         startButton.addEventListener('click', async () => {
             if (!audioCtx) {
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                sampleRate = audioCtx.sampleRate; // Lấy tần số lấy mẫu thực của điện thoại
+                sampleRate = audioCtx.sampleRate; 
             }
 
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 const source = audioCtx.createMediaStreamSource(stream);
                 
-                // Khởi tạo bộ lọc nhiễu
                 highpassFilter = audioCtx.createBiquadFilter();
                 highpassFilter.frequency.value = 80;
                 highpassFilter.type = filterCheckbox.checked ? 'highpass' : 'allpass';
@@ -186,7 +211,6 @@
                 analyser = audioCtx.createAnalyser();
                 analyser.fftSize = 2048; 
                 
-                // Kết nối: Mic -> Highpass -> Lowpass -> Analyser
                 source.connect(highpassFilter);
                 highpassFilter.connect(lowpassFilter);
                 lowpassFilter.connect(analyser);
@@ -194,6 +218,7 @@
                 resizeCanvas();
                 isPaused = false;
                 draw();
+                triggerAutoStop(); // Bắt đầu tính giờ 0.5s
                 
                 startButton.textContent = "Đang thu âm...";
                 startButton.disabled = true;
@@ -207,29 +232,29 @@
         pauseButton.addEventListener('click', () => {
             isPaused = !isPaused;
             if (isPaused) {
+                clearTimeout(stopTimer); // Hủy đếm giờ nếu người dùng tự ấn dừng
                 pauseButton.textContent = "Tiếp tục (Resume)";
                 pauseButton.style.backgroundColor = "#28a745"; 
             } else {
                 pauseButton.textContent = "Dừng (Pause)";
                 pauseButton.style.backgroundColor = "#dc3545"; 
                 draw(); 
+                triggerAutoStop(); // Kích hoạt lại đếm giờ 0.5s khi ấn Tiếp tục
             }
         });
 
         function drawFrame() {
             if (!analyser) return;
-            const bufferLength = analyser.frequencyBinCount; // Thường là 1024
+            const bufferLength = analyser.frequencyBinCount; 
             const dataArray = new Uint8Array(bufferLength);
             analyser.getByteTimeDomainData(dataArray);
 
             const zoomX = parseFloat(zoomXSlider.value);
             const zoomY = parseFloat(zoomYSlider.value);
 
-            // Xóa khung nền
             canvasCtx.fillStyle = '#e6f7ff'; 
             canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Vẽ lưới ô ly
             canvasCtx.strokeStyle = '#b3e0ff'; 
             canvasCtx.lineWidth = 1;
             const stepX = canvas.width / 10; 
@@ -246,22 +271,18 @@
             }
             canvasCtx.stroke();
 
-            // Vẽ trục tọa độ ĐEN
             canvasCtx.lineWidth = 2;
             canvasCtx.strokeStyle = '#000000'; 
             canvasCtx.beginPath();
-            canvasCtx.moveTo(0, canvas.height / 2); // Trục X
+            canvasCtx.moveTo(0, canvas.height / 2); 
             canvasCtx.lineTo(canvas.width, canvas.height / 2);
-            canvasCtx.moveTo(canvas.width / 2, 0);  // Trục Y
+            canvasCtx.moveTo(canvas.width / 2, 0);  
             canvasCtx.lineTo(canvas.width / 2, canvas.height);
             canvasCtx.stroke();
 
-            // GHI CHÚ SỐ ĐO (ĐỘ CHÍNH XÁC 0.001)
             canvasCtx.fillStyle = '#000000'; 
             canvasCtx.font = 'bold 12px Arial';
             
-            // Tính toán thời gian thực (Trục X)
-            // Tổng thời gian = (Số mẫu / Tần số lấy mẫu) / Độ phóng to
             const totalTimeOnScreen = (bufferLength / sampleRate) / zoomX;
             const timePerGrid = totalTimeOnScreen / 10;
 
@@ -269,13 +290,11 @@
             canvasCtx.textBaseline = 'top';
             for(let i = 0; i <= 10; i++) {
                 if (i !== 5) {
-                    // Lấy thời gian làm tròn 3 chữ số thập phân (Ví dụ: 0.005)
                     let t = (i * timePerGrid).toFixed(3);
                     canvasCtx.fillText(t + "s", i * stepX, canvas.height / 2 + 5);
                 }
             }
             
-            // Số trục Y (Biên độ)
             canvasCtx.textAlign = 'left';
             canvasCtx.textBaseline = 'middle';
             for(let i = 0; i <= 8; i++) {
@@ -288,7 +307,6 @@
                 }
             }
 
-            // VẼ SÓNG MÀU ĐỎ
             canvasCtx.lineWidth = 3; 
             canvasCtx.strokeStyle = '#ff0000'; 
             canvasCtx.beginPath();
@@ -307,7 +325,6 @@
                 }
 
                 x += sliceWidth;
-                
                 if (x > canvas.width) break; 
             }
 
