@@ -52,9 +52,9 @@
             box-shadow: none;
         }
         #pauseButton {
-            background-color: #dc3545;
+            background-color: #28a745; /* Màu xanh lá mặc định */
         }
-        #pauseButton:hover { background-color: #a71d2a; }
+        #pauseButton:hover { filter: brightness(0.9); }
         
         .toggle-box {
             display: flex;
@@ -109,8 +109,8 @@
     <h2>Đo Sóng Âm Trực Tiếp</h2>
     
     <div class="controls">
-        <button id="startButton">Bật Micro & Đo Sóng</button>
-        <button id="pauseButton" disabled>Dừng (Pause)</button>
+        <button id="startButton">1. Bật Micro</button>
+        <button id="pauseButton" disabled>2. Tiếp tục</button>
         
         <label class="toggle-box filter-toggle">
             <input type="checkbox" id="noiseFilter"> Bật Lọc Nhiễu
@@ -150,9 +150,9 @@
         let audioCtx;
         let analyser;
         let highpassFilter, lowpassFilter;
-        let isPaused = false;
+        let isPaused = true; // Bắt đầu ở trạng thái dừng chờ lệnh
         let sampleRate = 48000; 
-        let stopTimer; // Biến đếm thời gian dừng
+        let stopTimer; 
 
         zoomXSlider.addEventListener('input', (e) => valX.textContent = e.target.value + 'x');
         zoomYSlider.addEventListener('input', (e) => valY.textContent = e.target.value + 'x');
@@ -172,21 +172,20 @@
         function resizeCanvas() {
             canvas.width = canvas.clientWidth;
             canvas.height = canvas.clientHeight;
-            if (isPaused) drawFrame(); 
+            drawFrame(); // Vẽ lại khung lưới kể cả khi đang dừng
         }
         window.addEventListener('resize', resizeCanvas);
 
-        // Hàm kích hoạt đếm ngược 0.5s để dừng
         function triggerAutoStop() {
             clearTimeout(stopTimer);
             if (autoStopCheckbox.checked && !isPaused) {
                 stopTimer = setTimeout(() => {
                     if (!isPaused) {
                         isPaused = true;
-                        pauseButton.textContent = "Tiếp tục (Resume)";
-                        pauseButton.style.backgroundColor = "#28a745"; 
+                        pauseButton.textContent = "Tiếp tục";
+                        pauseButton.style.backgroundColor = "#28a745"; // Trở về xanh lá
                     }
-                }, 500); // 500ms = 0.5s
+                }, 500); 
             }
         }
 
@@ -215,39 +214,52 @@
                 highpassFilter.connect(lowpassFilter);
                 lowpassFilter.connect(analyser);
 
+                // Chỉ khởi tạo vẽ lưới ban đầu, CHƯA thu sóng
+                isPaused = true;
                 resizeCanvas();
-                isPaused = false;
-                draw();
-                triggerAutoStop(); // Bắt đầu tính giờ 0.5s
+                drawFrame(); 
                 
-                startButton.textContent = "Đang thu âm...";
+                startButton.textContent = "Đã kết nối Micro";
                 startButton.disabled = true;
                 pauseButton.disabled = false;
-                pauseButton.textContent = "Dừng (Pause)";
+                pauseButton.textContent = "2. Tiếp tục";
             } catch (err) {
                 alert("Không thể truy cập micro. Vui lòng cấp quyền! Lỗi: " + err);
             }
         });
 
         pauseButton.addEventListener('click', () => {
-            isPaused = !isPaused;
             if (isPaused) {
-                clearTimeout(stopTimer); // Hủy đếm giờ nếu người dùng tự ấn dừng
-                pauseButton.textContent = "Tiếp tục (Resume)";
-                pauseButton.style.backgroundColor = "#28a745"; 
-            } else {
-                pauseButton.textContent = "Dừng (Pause)";
-                pauseButton.style.backgroundColor = "#dc3545"; 
+                // BẮT ĐẦU THU
+                isPaused = false;
+                pauseButton.textContent = "Dừng";
+                pauseButton.style.backgroundColor = "#dc3545"; // Đỏ
                 draw(); 
-                triggerAutoStop(); // Kích hoạt lại đếm giờ 0.5s khi ấn Tiếp tục
+                triggerAutoStop(); 
+            } else {
+                // NGƯỜI DÙNG CHỦ ĐỘNG BẤM DỪNG
+                isPaused = true;
+                clearTimeout(stopTimer); 
+                pauseButton.textContent = "Tiếp tục";
+                pauseButton.style.backgroundColor = "#28a745"; // Xanh lá
             }
         });
 
         function drawFrame() {
-            if (!analyser) return;
+            if (!analyser) {
+                // Vẽ lưới trống nếu chưa kết nối micro
+                canvasCtx.fillStyle = '#e6f7ff'; 
+                canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+                return;
+            }
+            
             const bufferLength = analyser.frequencyBinCount; 
             const dataArray = new Uint8Array(bufferLength);
-            analyser.getByteTimeDomainData(dataArray);
+            
+            // Chỉ lấy dữ liệu âm thanh mới nếu KHÔNG bị dừng
+            if (!isPaused) {
+                analyser.getByteTimeDomainData(dataArray);
+            }
 
             const zoomX = parseFloat(zoomXSlider.value);
             const zoomY = parseFloat(zoomYSlider.value);
@@ -307,28 +319,32 @@
                 }
             }
 
-            canvasCtx.lineWidth = 3; 
-            canvasCtx.strokeStyle = '#ff0000'; 
-            canvasCtx.beginPath();
+            // Chỉ vẽ đường sóng đỏ khi có dữ liệu thật (tránh vẽ đường ngang thẳng băng lúc mới bật mic)
+            if (!isPaused || dataArray[0] !== 0) {
+                canvasCtx.lineWidth = 3; 
+                canvasCtx.strokeStyle = '#ff0000'; 
+                canvasCtx.beginPath();
 
-            const sliceWidth = (canvas.width * zoomX) / bufferLength;
-            let x = 0;
+                const sliceWidth = (canvas.width * zoomX) / bufferLength;
+                let x = 0;
 
-            for (let i = 0; i < bufferLength; i++) {
-                const v = dataArray[i] / 128.0; 
-                const y = (v - 1.0) * zoomY * (canvas.height / 2) + (canvas.height / 2);
+                for (let i = 0; i < bufferLength; i++) {
+                    // Nếu chưa có dữ liệu (lúc mới chạy), gán mặc định đường giữa
+                    const v = dataArray[i] ? dataArray[i] / 128.0 : 1.0; 
+                    const y = (v - 1.0) * zoomY * (canvas.height / 2) + (canvas.height / 2);
 
-                if (i === 0) {
-                    canvasCtx.moveTo(x, y);
-                } else {
-                    canvasCtx.lineTo(x, y);
+                    if (i === 0) {
+                        canvasCtx.moveTo(x, y);
+                    } else {
+                        canvasCtx.lineTo(x, y);
+                    }
+
+                    x += sliceWidth;
+                    if (x > canvas.width) break; 
                 }
 
-                x += sliceWidth;
-                if (x > canvas.width) break; 
+                canvasCtx.stroke();
             }
-
-            canvasCtx.stroke();
         }
 
         function draw() {
