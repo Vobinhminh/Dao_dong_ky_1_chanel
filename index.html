@@ -87,7 +87,7 @@
     <div class="controls-wrapper">
         <div class="controls">
             <button id="startButton">1. Bật Micro</button>
-            <button id="pauseButton" disabled>2. Tiếp tục (Thu 5s)</button>
+            <button id="pauseButton" disabled>2. Tiếp tục (Thu 3s)</button>
         </div>
     </div>
 
@@ -116,13 +116,14 @@
         function triggerAutoStop() {
             clearTimeout(stopTimer);
             if (!isPaused) {
+                // Tự động ngưng sau 3 giây (3000ms)
                 stopTimer = setTimeout(() => {
                     if (!isPaused) {
                         isPaused = true;
-                        pauseButton.textContent = "2. Tiếp tục (Thu 5s)";
+                        pauseButton.textContent = "2. Tiếp tục (Thu 3s)";
                         pauseButton.style.backgroundColor = "#28a745"; 
                     }
-                }, 5000); 
+                }, 3000); 
             }
         }
 
@@ -159,7 +160,7 @@
                 startButton.textContent = "Đã kết nối";
                 startButton.disabled = true;
                 pauseButton.disabled = false;
-                pauseButton.textContent = "2. Tiếp tục (Thu 5s)";
+                pauseButton.textContent = "2. Tiếp tục (Thu 3s)";
             } catch (err) {
                 alert("Không thể truy cập micro. Vui lòng cấp quyền! Lỗi: " + err);
             }
@@ -168,14 +169,14 @@
         pauseButton.addEventListener('click', () => {
             if (isPaused) {
                 isPaused = false;
-                pauseButton.textContent = "Đang thu (5s)...";
+                pauseButton.textContent = "Đang thu (3s)...";
                 pauseButton.style.backgroundColor = "#dc3545"; 
                 draw(); 
                 triggerAutoStop(); 
             } else {
                 isPaused = true;
                 clearTimeout(stopTimer); 
-                pauseButton.textContent = "2. Tiếp tục (Thu 5s)";
+                pauseButton.textContent = "2. Tiếp tục (Thu 3s)";
                 pauseButton.style.backgroundColor = "#28a745"; 
             }
         });
