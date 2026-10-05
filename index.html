@@ -9,64 +9,123 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            background-color: #1a1a1a;
-            color: white;
+            background-color: #f0f4f8; /* Nền trang màu sáng */
+            color: #333; /* Chữ màu đen/xám đậm */
             font-family: sans-serif;
             margin: 0;
             padding: 20px;
         }
         canvas {
-            background-color: #000;
-            border: 2px solid #555;
+            /* Hình nền dự phòng, sẽ được vẽ đè bằng Javascript */
+            background-color: #e6f7ff; 
+            border: 3px solid #000; /* Viền đồ thị màu đen */
             width: 100%;
             max-width: 800px;
             height: 50vh;
-            margin-top: 20px;
+            margin-top: 15px;
             border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
         }
         button {
-            padding: 15px 30px;
-            font-size: 18px;
+            padding: 12px 24px;
+            font-size: 16px;
             font-weight: bold;
-            margin-top: 10px;
             cursor: pointer;
             background-color: #007bff;
             color: white;
             border: none;
             border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            transition: background-color 0.2s;
         }
+        button:hover { background-color: #0056b3; }
         button:disabled {
-            background-color: #555;
+            background-color: #999;
             cursor: not-allowed;
+            box-shadow: none;
         }
-        .controls {
-            margin-top: 15px;
+        #pauseButton {
+            background-color: #dc3545;
+        }
+        #pauseButton:hover { background-color: #a71d2a; }
+        
+        .zoom-controls {
             display: flex;
-            gap: 15px;
+            gap: 20px;
+            margin-top: 15px;
+            background: #ffffff;
+            border: 1px solid #ccc;
+            padding: 15px;
+            border-radius: 8px;
+            width: 100%;
+            max-width: 770px;
+            justify-content: space-around;
+            flex-wrap: wrap;
+        }
+        .slider-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+            font-weight: bold;
+        }
+        input[type="range"] {
+            width: 150px;
         }
     </style>
 </head>
 <body>
     <h2>Đo Sóng Âm Trực Tiếp</h2>
     
-    <button id="startButton">Bật Micro & Đo Sóng</button>
+    <div class="controls">
+        <button id="startButton">Bật Micro & Đo Sóng</button>
+        <button id="pauseButton" disabled>Dừng (Pause)</button>
+    </div>
+
+    <div class="zoom-controls">
+        <div class="slider-group">
+            <label for="zoomX">Phóng to Trục X (Thời gian): <span id="valX">1x</span></label>
+            <input type="range" id="zoomX" min="1" max="10" step="0.5" value="1">
+        </div>
+        <div class="slider-group">
+            <label for="zoomY">Phóng to Trục Y (Biên độ): <span id="valY">1x</span></label>
+            <input type="range" id="zoomY" min="1" max="10" step="0.5" value="1">
+        </div>
+    </div>
+
     <canvas id="oscilloscope"></canvas>
 
     <script>
         const startButton = document.getElementById('startButton');
+        const pauseButton = document.getElementById('pauseButton');
         const canvas = document.getElementById('oscilloscope');
         const canvasCtx = canvas.getContext('2d');
-
-        // Chỉnh độ phân giải thực của canvas cho sắc nét
-        function resizeCanvas() {
-            canvas.width = canvas.clientWidth;
-            canvas.height = canvas.clientHeight;
-        }
-        window.addEventListener('resize', resizeCanvas);
+        
+        const zoomXSlider = document.getElementById('zoomX');
+        const zoomYSlider = document.getElementById('zoomY');
+        const valX = document.getElementById('valX');
+        const valY = document.getElementById('valY');
 
         let audioCtx;
         let analyser;
+        let isPaused = false;
+
+        zoomXSlider.addEventListener('input', (e) => valX.textContent = e.target.value + 'x');
+        zoomYSlider.addEventListener('input', (e) => valY.textContent = e.target.value + 'x');
+
+        function resizeCanvas() {
+            canvas.width = canvas.clientWidth;
+            canvas.height = canvas.clientHeight;
+            if (isPaused) drawFrame(); 
+        }
+        window.addEventListener('resize', resizeCanvas);
 
         startButton.addEventListener('click', async () => {
             if (!audioCtx) {
@@ -74,61 +133,114 @@
             }
 
             try {
-                // Yêu cầu quyền truy cập micro
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 const source = audioCtx.createMediaStreamSource(stream);
                 
                 analyser = audioCtx.createAnalyser();
-                // fftSize quyết định độ chi tiết của sóng (2048 là chuẩn)
                 analyser.fftSize = 2048; 
                 source.connect(analyser);
 
                 resizeCanvas();
+                isPaused = false;
                 draw();
                 
-                startButton.textContent = "Đang thu âm thanh...";
+                startButton.textContent = "Đang thu âm...";
                 startButton.disabled = true;
+                pauseButton.disabled = false;
+                pauseButton.textContent = "Dừng (Pause)";
             } catch (err) {
                 alert("Không thể truy cập micro. Vui lòng cấp quyền! Lỗi: " + err);
             }
         });
 
-        function draw() {
-            requestAnimationFrame(draw);
+        pauseButton.addEventListener('click', () => {
+            isPaused = !isPaused;
+            if (isPaused) {
+                pauseButton.textContent = "Tiếp tục (Resume)";
+                pauseButton.style.backgroundColor = "#28a745"; 
+            } else {
+                pauseButton.textContent = "Dừng (Pause)";
+                pauseButton.style.backgroundColor = "#dc3545"; 
+                draw(); 
+            }
+        });
 
+        function drawFrame() {
             const bufferLength = analyser.frequencyBinCount;
             const dataArray = new Uint8Array(bufferLength);
-            
-            // Lấy dữ liệu miền thời gian (Time Domain)
             analyser.getByteTimeDomainData(dataArray);
 
-            // Xóa khung hình cũ
-            canvasCtx.fillStyle = 'rgb(0, 0, 0)';
+            const zoomX = parseFloat(zoomXSlider.value);
+            const zoomY = parseFloat(zoomYSlider.value);
+
+            // 1. Vẽ nền màu xanh nhạt
+            canvasCtx.fillStyle = '#e6f7ff'; 
             canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Vẽ trục X và Y (Hệ trục tọa độ)
+            // 2. Vẽ lưới ô ly mờ (Màu xanh đậm hơn một chút)
+            canvasCtx.strokeStyle = '#b3e0ff'; 
             canvasCtx.lineWidth = 1;
-            canvasCtx.strokeStyle = '#444';
+            const stepX = canvas.width / 10; // Chia trục X thành 10 ô
+            const stepY = canvas.height / 8;  // Chia trục Y thành 8 ô
+            
             canvasCtx.beginPath();
-            // Trục X (Thời gian)
-            canvasCtx.moveTo(0, canvas.height / 2);
+            for(let i = 0; i <= 10; i++) {
+                canvasCtx.moveTo(i * stepX, 0);
+                canvasCtx.lineTo(i * stepX, canvas.height);
+            }
+            for(let i = 0; i <= 8; i++) {
+                canvasCtx.moveTo(0, i * stepY);
+                canvasCtx.lineTo(canvas.width, i * stepY);
+            }
+            canvasCtx.stroke();
+
+            // 3. Vẽ trục tọa độ chính (Trục X và Y màu ĐEN)
+            canvasCtx.lineWidth = 2;
+            canvasCtx.strokeStyle = '#000000'; // ĐEN
+            canvasCtx.beginPath();
+            canvasCtx.moveTo(0, canvas.height / 2); // Trục X
             canvasCtx.lineTo(canvas.width, canvas.height / 2);
-            // Trục Y (Biên độ)
-            canvasCtx.moveTo(canvas.width / 2, 0);
+            canvasCtx.moveTo(canvas.width / 2, 0);  // Trục Y
             canvasCtx.lineTo(canvas.width / 2, canvas.height);
             canvasCtx.stroke();
 
-            // Vẽ sóng âm thanh
-            canvasCtx.lineWidth = 2.5;
-            canvasCtx.strokeStyle = 'rgb(0, 255, 0)'; // Sóng màu xanh lá
+            // 4. Hiển thị SỐ MÀU ĐEN trên các trục
+            canvasCtx.fillStyle = '#000000'; // Chữ màu đen
+            canvasCtx.font = 'bold 14px Arial';
+            
+            // Số trục X (Thời gian/Khoảng cách)
+            canvasCtx.textAlign = 'center';
+            canvasCtx.textBaseline = 'top';
+            for(let i = 0; i <= 10; i++) {
+                if (i !== 5) { // Bỏ qua gốc tọa độ ở giữa
+                    canvasCtx.fillText(i - 5, i * stepX, canvas.height / 2 + 8);
+                }
+            }
+            
+            // Số trục Y (Biên độ - Tự động tính toán lại khi Phóng to/Thu nhỏ)
+            canvasCtx.textAlign = 'left';
+            canvasCtx.textBaseline = 'middle';
+            for(let i = 0; i <= 8; i++) {
+                if (i !== 4) { // Bỏ qua gốc tọa độ
+                    let val = (4 - i) / 4; 
+                    let displayVal = (val / zoomY).toFixed(2); // Cập nhật số khi zoom
+                    canvasCtx.fillText(displayVal, canvas.width / 2 + 8, i * stepY);
+                } else {
+                    canvasCtx.fillText("0", canvas.width / 2 + 8, canvas.height / 2 + 10); // Gốc tọa độ 0
+                }
+            }
+
+            // 5. Vẽ đồ thị SÓNG MÀU ĐỎ
+            canvasCtx.lineWidth = 3; // Nét vẽ đậm hơn chút để rõ trên nền xanh
+            canvasCtx.strokeStyle = '#ff0000'; // ĐỎ
             canvasCtx.beginPath();
 
-            const sliceWidth = canvas.width * 1.0 / bufferLength;
+            const sliceWidth = (canvas.width * zoomX) / bufferLength;
             let x = 0;
 
             for (let i = 0; i < bufferLength; i++) {
-                const v = dataArray[i] / 128.0; // Chuẩn hóa về mức 1.0
-                const y = v * canvas.height / 2; // Ánh xạ lên trục Y
+                const v = dataArray[i] / 128.0; 
+                const y = (v - 1.0) * zoomY * (canvas.height / 2) + (canvas.height / 2);
 
                 if (i === 0) {
                     canvasCtx.moveTo(x, y);
@@ -137,10 +249,18 @@
                 }
 
                 x += sliceWidth;
+                
+                // Dừng vẽ nếu sóng chạy ra khỏi viền phải màn hình
+                if (x > canvas.width) break; 
             }
 
-            canvasCtx.lineTo(canvas.width, canvas.height / 2);
             canvasCtx.stroke();
+        }
+
+        function draw() {
+            if (isPaused) return; 
+            requestAnimationFrame(draw);
+            drawFrame();
         }
     </script>
 </body>
