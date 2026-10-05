@@ -16,7 +16,7 @@
             padding: 10px 15px;
         }
         h2 {
-            margin: 5px 0 10px 0;
+            margin: 10px 0 15px 0;
             font-size: 1.5rem;
         }
         canvas {
@@ -24,7 +24,7 @@
             border: 3px solid #000;
             width: 100%;
             max-width: 1200px;
-            height: 55vh;
+            height: 60vh; /* Đồ thị to hơn vì đã bỏ các nút zoom */
             border-radius: 8px;
             box-shadow: 0 4px 10px rgba(0,0,0,0.1);
         }
@@ -35,17 +35,18 @@
             max-width: 1200px;
             gap: 10px;
             margin-bottom: 10px;
+            align-items: center;
         }
         .controls {
             display: flex;
-            gap: 10px;
+            gap: 15px;
             flex-wrap: wrap;
             justify-content: center;
             align-items: center;
         }
         button {
-            padding: 10px 18px;
-            font-size: 15px;
+            padding: 12px 24px;
+            font-size: 16px;
             font-weight: bold;
             cursor: pointer;
             background-color: #007bff;
@@ -70,66 +71,30 @@
             display: flex;
             align-items: center;
             gap: 6px;
-            font-size: 14px;
+            font-size: 15px;
             font-weight: bold;
-            padding: 8px 12px;
+            padding: 10px 15px;
             border-radius: 8px;
             cursor: pointer;
             background: #ffe6e6;
             border: 2px solid #ff9999;
         }
         .toggle-box input {
-            width: 16px;
-            height: 16px;
+            width: 18px;
+            height: 18px;
             cursor: pointer;
         }
 
-        .zoom-controls {
-            display: flex;
-            gap: 8px;
-            background: #ffffff;
-            border: 1px solid #ccc;
-            padding: 10px;
-            border-radius: 8px;
-            align-items: center;
-            justify-content: center;
-            flex-wrap: wrap;
-        }
-        .zoom-controls span {
-            font-weight: bold;
-            font-size: 14px;
-            margin-right: 5px;
-        }
-        .zoom-btn {
-            padding: 6px 12px;
-            font-size: 14px;
-            background-color: #e0e0e0;
-            color: #333;
-            box-shadow: none;
-        }
-        .zoom-btn:hover {
-            background-color: #ccc;
-        }
-        .zoom-btn.active {
-            background-color: #ff9800; /* Màu cam nổi bật cho mức zoom đang chọn */
-            color: white;
-        }
-
-        /* ----- CSS ĐẶC BIỆT KHI XOAY NGANG ĐIỆN THOẠI (LANDSCAPE) ----- */
+        /* Tối ưu hóa khi xoay ngang điện thoại */
         @media (orientation: landscape) {
             body { padding: 5px 15px; }
             h2 { display: none; } 
             .controls-wrapper {
                 flex-direction: row; 
-                justify-content: space-between;
-                align-items: center;
-            }
-            .zoom-controls {
-                margin: 0;
-                padding: 8px 12px;
+                justify-content: center;
             }
             canvas {
-                height: 75vh; 
+                height: 80vh; 
                 margin-top: 5px;
             }
         }
@@ -147,14 +112,6 @@
                 <input type="checkbox" id="noiseFilter"> Lọc Nhiễu
             </label>
         </div>
-
-        <div class="zoom-controls">
-            <span>Phóng to:</span>
-            <button class="zoom-btn active" data-zoom="1">1x</button>
-            <button class="zoom-btn" data-zoom="2">2x</button>
-            <button class="zoom-btn" data-zoom="3">3x</button>
-            <button class="zoom-btn" data-zoom="5">5x</button>
-        </div>
     </div>
 
     <canvas id="oscilloscope"></canvas>
@@ -165,30 +122,13 @@
         const filterCheckbox = document.getElementById('noiseFilter');
         const canvas = document.getElementById('oscilloscope');
         const canvasCtx = canvas.getContext('2d');
-        const zoomBtns = document.querySelectorAll('.zoom-btn');
-
+        
         let audioCtx;
         let analyser;
         let highpassFilter, lowpassFilter;
         let isPaused = true; 
         let sampleRate = 48000; 
         let stopTimer; 
-        let currentZoom = 1; // Mức zoom mặc định
-
-        // Xử lý sự kiện khi bấm nút Zoom
-        zoomBtns.forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                // Bỏ đánh dấu nút cũ
-                zoomBtns.forEach(b => b.classList.remove('active'));
-                // Đánh dấu nút mới
-                e.target.classList.add('active');
-                // Lấy giá trị zoom
-                currentZoom = parseFloat(e.target.dataset.zoom);
-                
-                // Nếu đang dừng hình, vẽ lại ngay lập tức để thấy thay đổi
-                if (isPaused) drawFrame(); 
-            });
-        });
 
         filterCheckbox.addEventListener('change', (e) => {
             if (highpassFilter && lowpassFilter) {
@@ -241,7 +181,8 @@
                 lowpassFilter.type = filterCheckbox.checked ? 'lowpass' : 'allpass';
 
                 analyser = audioCtx.createAnalyser();
-                analyser.fftSize = 2048; 
+                // Nâng cấp fftSize lên 4096 để đảm bảo lấy đủ dữ liệu âm thanh quét kín 0.04 giây
+                analyser.fftSize = 4096; 
                 
                 source.connect(highpassFilter);
                 highpassFilter.connect(lowpassFilter);
@@ -289,19 +230,21 @@
                 analyser.getByteTimeDomainData(dataArray);
             }
 
-            // Dùng 1 biến currentZoom chung cho cả trục X và trục Y
-            const zoomXY = currentZoom;
+            // --- THIẾT LẬP THÔNG SỐ CỐ ĐỊNH ---
+            const zoomY = 2.0;               // Trục Y cố định cường độ x2
+            const totalTimeOnScreen = 0.04;  // Tổng thời gian màn hình 0.04s (-0.02s đến 0.02s)
 
             canvasCtx.fillStyle = '#e6f7ff'; 
             canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
 
+            // Vẽ lưới ô ly
             canvasCtx.strokeStyle = '#b3e0ff'; 
             canvasCtx.lineWidth = 1;
-            const stepX = canvas.width / 10; 
-            const stepY = canvas.height / 8;  
+            const stepX = canvas.width / 4;  // Trục X chia làm 4 ô (mỗi ô đúng 0.01s)
+            const stepY = canvas.height / 8; // Trục Y chia làm 8 ô
             
             canvasCtx.beginPath();
-            for(let i = 0; i <= 10; i++) {
+            for(let i = 0; i <= 4; i++) {
                 canvasCtx.moveTo(i * stepX, 0);
                 canvasCtx.lineTo(i * stepX, canvas.height);
             }
@@ -311,6 +254,7 @@
             }
             canvasCtx.stroke();
 
+            // Vẽ trục tọa độ trung tâm ĐEN
             canvasCtx.lineWidth = 2;
             canvasCtx.strokeStyle = '#000000'; 
             canvasCtx.beginPath();
@@ -320,47 +264,48 @@
             canvasCtx.lineTo(canvas.width / 2, canvas.height);
             canvasCtx.stroke();
 
+            // Ghi chú số liệu 
             canvasCtx.fillStyle = '#000000'; 
-            canvasCtx.font = 'bold 12px Arial';
+            canvasCtx.font = 'bold 14px Arial';
             
-            // Tính toán lưới trục X dựa trên mức zoom chung
-            const totalTimeOnScreen = (bufferLength / sampleRate) / zoomXY;
-            const timePerGrid = totalTimeOnScreen / 10;
-
+            // Trục X: -0.02s, -0.01s, 0, 0.01s, 0.02s
             canvasCtx.textAlign = 'center';
             canvasCtx.textBaseline = 'top';
-            for(let i = 0; i <= 10; i++) {
-                if (i !== 5) {
-                    let t = (i * timePerGrid).toFixed(2);
+            for(let i = 0; i <= 4; i++) {
+                if (i !== 2) {
+                    let t = ((i - 2) * 0.01).toFixed(2);
                     canvasCtx.fillText(t + "s", i * stepX, canvas.height / 2 + 5);
                 }
             }
             
-            // Tính toán lưới trục Y dựa trên mức zoom chung
+            // Trục Y: Phóng đại x2
             canvasCtx.textAlign = 'left';
             canvasCtx.textBaseline = 'middle';
+            const maxY = 1.0 / zoomY; // Tại x2, đỉnh màn hình là 0.5
+            const valPerStep = (maxY * 2) / 8; 
             for(let i = 0; i <= 8; i++) {
                 if (i !== 4) { 
-                    let val = (4 - i) / 4; 
-                    let displayVal = (val / zoomXY).toFixed(2); 
-                    canvasCtx.fillText(displayVal, canvas.width / 2 + 8, i * stepY);
+                    let val = maxY - (i * valPerStep); 
+                    canvasCtx.fillText(val.toFixed(3), canvas.width / 2 + 8, i * stepY);
                 } else {
                     canvasCtx.fillText("0", canvas.width / 2 + 8, canvas.height / 2 - 12); 
                 }
             }
 
+            // Vẽ sóng đỏ
             if (!isPaused || dataArray[0] !== 0) {
                 canvasCtx.lineWidth = 3; 
                 canvasCtx.strokeStyle = '#ff0000'; 
                 canvasCtx.beginPath();
 
-                // Áp dụng zoom cho nét vẽ
-                const sliceWidth = (canvas.width * zoomXY) / bufferLength;
+                // Tính toán để phân bổ dữ liệu vừa khít 0.04s lên màn hình
+                const samplesNeeded = totalTimeOnScreen * sampleRate;
+                const sliceWidth = canvas.width / samplesNeeded;
                 let x = 0;
 
                 for (let i = 0; i < bufferLength; i++) {
                     const v = dataArray[i] ? dataArray[i] / 128.0 : 1.0; 
-                    const y = (v - 1.0) * zoomXY * (canvas.height / 2) + (canvas.height / 2);
+                    const y = (v - 1.0) * zoomY * (canvas.height / 2) + (canvas.height / 2);
 
                     if (i === 0) {
                         canvasCtx.moveTo(x, y);
@@ -369,6 +314,7 @@
                     }
 
                     x += sliceWidth;
+                    // Dừng vẽ nếu nét vẽ đã chạy hết viền phải màn hình
                     if (x > canvas.width) break; 
                 }
 
