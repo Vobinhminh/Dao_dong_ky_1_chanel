@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dao động ký (Oscilloscope) - Sóng âm</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #1a1a1a;
+            color: white;
+            font-family: sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+        canvas {
+            background-color: #000;
+            border: 2px solid #555;
+            width: 100%;
+            max-width: 800px;
+            height: 50vh;
+            margin-top: 20px;
+            border-radius: 8px;
+        }
+        button {
+            padding: 15px 30px;
+            font-size: 18px;
+            font-weight: bold;
+            margin-top: 10px;
+            cursor: pointer;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        button:disabled {
+            background-color: #555;
+            cursor: not-allowed;
+        }
+        .controls {
+            margin-top: 15px;
+            display: flex;
+            gap: 15px;
+        }
+    </style>
+</head>
+<body>
+    <h2>Đo Sóng Âm Trực Tiếp</h2>
+    
+    <button id="startButton">Bật Micro & Đo Sóng</button>
+    <canvas id="oscilloscope"></canvas>
+
+    <script>
+        const startButton = document.getElementById('startButton');
+        const canvas = document.getElementById('oscilloscope');
+        const canvasCtx = canvas.getContext('2d');
+
+        // Chỉnh độ phân giải thực của canvas cho sắc nét
+        function resizeCanvas() {
+            canvas.width = canvas.clientWidth;
+            canvas.height = canvas.clientHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+
+        let audioCtx;
+        let analyser;
+
+        startButton.addEventListener('click', async () => {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+
+            try {
+                // Yêu cầu quyền truy cập micro
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const source = audioCtx.createMediaStreamSource(stream);
+                
+                analyser = audioCtx.createAnalyser();
+                // fftSize quyết định độ chi tiết của sóng (2048 là chuẩn)
+                analyser.fftSize = 2048; 
+                source.connect(analyser);
+
+                resizeCanvas();
+                draw();
+                
+                startButton.textContent = "Đang thu âm thanh...";
+                startButton.disabled = true;
+            } catch (err) {
+                alert("Không thể truy cập micro. Vui lòng cấp quyền! Lỗi: " + err);
+            }
+        });
+
+        function draw() {
+            requestAnimationFrame(draw);
+
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            
+            // Lấy dữ liệu miền thời gian (Time Domain)
+            analyser.getByteTimeDomainData(dataArray);
+
+            // Xóa khung hình cũ
+            canvasCtx.fillStyle = 'rgb(0, 0, 0)';
+            canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Vẽ trục X và Y (Hệ trục tọa độ)
+            canvasCtx.lineWidth = 1;
+            canvasCtx.strokeStyle = '#444';
+            canvasCtx.beginPath();
+            // Trục X (Thời gian)
+            canvasCtx.moveTo(0, canvas.height / 2);
+            canvasCtx.lineTo(canvas.width, canvas.height / 2);
+            // Trục Y (Biên độ)
+            canvasCtx.moveTo(canvas.width / 2, 0);
+            canvasCtx.lineTo(canvas.width / 2, canvas.height);
+            canvasCtx.stroke();
+
+            // Vẽ sóng âm thanh
+            canvasCtx.lineWidth = 2.5;
+            canvasCtx.strokeStyle = 'rgb(0, 255, 0)'; // Sóng màu xanh lá
+            canvasCtx.beginPath();
+
+            const sliceWidth = canvas.width * 1.0 / bufferLength;
+            let x = 0;
+
+            for (let i = 0; i < bufferLength; i++) {
+                const v = dataArray[i] / 128.0; // Chuẩn hóa về mức 1.0
+                const y = v * canvas.height / 2; // Ánh xạ lên trục Y
+
+                if (i === 0) {
+                    canvasCtx.moveTo(x, y);
+                } else {
+                    canvasCtx.lineTo(x, y);
+                }
+
+                x += sliceWidth;
+            }
+
+            canvasCtx.lineTo(canvas.width, canvas.height / 2);
+            canvasCtx.stroke();
+        }
+    </script>
+</body>
+</html>
