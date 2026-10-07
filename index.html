@@ -6,47 +6,43 @@
     <title>Dao động ký (Oscilloscope) - Sóng âm</title>
     <style>
         body {
+            margin: 0;
+            padding: 0;
             display: flex;
             flex-direction: column;
-            align-items: center;
-            background-color: #f0f4f8;
-            color: #333;
+            width: 100vw;
+            height: 100vh;
+            height: 100dvh;
+            overflow: hidden;
+            background-color: #e6f7ff;
             font-family: sans-serif;
-            margin: 0;
-            padding: 10px 15px;
         }
-        h2 {
-            margin: 10px 0 15px 0;
-            font-size: 1.5rem;
-        }
-        canvas {
-            background-color: #e6f7ff; 
-            border: 3px solid #000;
-            width: 100%;
-            max-width: 1200px;
-            height: 60vh; 
-            border-radius: 8px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-        }
+        
         .controls-wrapper {
             display: flex;
-            flex-direction: column;
-            width: 100%;
-            max-width: 1200px;
-            gap: 10px;
-            margin-bottom: 10px;
+            justify-content: space-between;
             align-items: center;
-        }
-        .controls {
-            display: flex;
+            padding: 8px 15px;
+            background-color: #f0f4f8;
+            border-bottom: 3px solid #000;
+            box-sizing: border-box;
             gap: 15px;
-            flex-wrap: wrap;
-            justify-content: center;
-            align-items: center;
+            z-index: 10;
         }
+
+        .info-panel {
+            font-weight: bold;
+            font-size: 14px;
+            color: #333;
+            background: #fff;
+            padding: 6px 12px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+        }
+
         button {
-            padding: 12px 24px;
-            font-size: 16px;
+            padding: 8px 18px;
+            font-size: 15px;
             font-weight: bold;
             cursor: pointer;
             background-color: #007bff;
@@ -67,28 +63,20 @@
         }
         #pauseButton:hover { filter: brightness(0.9); }
 
-        @media (orientation: landscape) {
-            body { padding: 5px 15px; }
-            h2 { display: none; } 
-            .controls-wrapper {
-                flex-direction: row; 
-                justify-content: center;
-            }
-            canvas {
-                height: 80vh; 
-                margin-top: 5px;
-            }
+        canvas {
+            flex-grow: 1;
+            width: 100%;
+            display: block;
         }
     </style>
 </head>
 <body>
-    <h2>Đo Sóng Âm Trực Tiếp</h2>
-    
     <div class="controls-wrapper">
-        <div class="controls">
+        <div style="display: flex; gap: 10px; align-items: center;">
             <button id="startButton">1. Bật Micro</button>
-            <button id="pauseButton" disabled>2. Tiếp tục (Thu 3s)</button>
+            <button id="pauseButton" disabled>2. Đo</button>
         </div>
+        <div class="info-panel" id="infoText">Tần số: Đang chờ... | 6 Chu kỳ: --</div>
     </div>
 
     <canvas id="oscilloscope"></canvas>
@@ -96,6 +84,7 @@
     <script>
         const startButton = document.getElementById('startButton');
         const pauseButton = document.getElementById('pauseButton');
+        const infoText = document.getElementById('infoText');
         const canvas = document.getElementById('oscilloscope');
         const canvasCtx = canvas.getContext('2d');
         
@@ -105,6 +94,7 @@
         let isPaused = true; 
         let sampleRate = 48000; 
         let stopTimer; 
+        let detectedFrequency = 440; // Mặc định giả định 440Hz
 
         function resizeCanvas() {
             canvas.width = canvas.clientWidth;
@@ -113,17 +103,61 @@
         }
         window.addEventListener('resize', resizeCanvas);
 
+        // Thuật toán tự động tìm tần số cơ bản từ mảng dữ liệu (Autocorrelation)
+        function autoCorrelate(buffer, sampleRate) {
+            let SIZE = buffer.length;
+            let sumSq = 0;
+            for (let i = 0; i < SIZE; i++) {
+                let val = (buffer[i] - 128) / 128;
+                sumSq += val * val;
+            }
+            let rootMeanSq = Math.sqrt(sumSq / SIZE);
+            if (rootMeanSq < 0.01) return -1; // Quá nhỏ/yên lặng
+
+            let r1 = 0, r2 = SIZE - 1, thres = 0.2;
+            for (let i = 0; i < SIZE / 2; i++) {
+                if (Math.abs((buffer[i] - 128) / 128) < thres) { r1 = i; break; }
+            }
+            for (let i = 1; i < SIZE / 2; i++) {
+                if (Math.abs((buffer[SIZE - i] - 128) / 128) < thres) { r2 = SIZE - i; break; }
+            }
+
+            buffer = buffer.slice(r1, r2);
+            SIZE = buffer.length;
+
+            let c = new Array(SIZE).fill(0);
+            for (let i = 0; i < SIZE; i++) {
+                for (let j = 0; j < SIZE - i; j++) {
+                    let v1 = (buffer[j] - 128) / 128;
+                    let v2 = (buffer[j + i] - 128) / 128;
+                    c[i] += v1 * v2;
+                }
+            }
+
+            let d = 0;
+            while (c[d] > c[d + 1]) d++;
+            let maxval = -1, maxpos = -1;
+            for (let i = d; i < SIZE; i++) {
+                if (c[i] > maxval) {
+                    maxval = c[i];
+                    maxpos = i;
+                }
+            }
+            let T0 = maxpos;
+            return sampleRate / T0;
+        }
+
         function triggerAutoStop() {
             clearTimeout(stopTimer);
             if (!isPaused) {
-                // Tự động ngưng sau 3 giây (3000ms)
+                // Tự động ngưng sau 2 giây (2000ms)
                 stopTimer = setTimeout(() => {
                     if (!isPaused) {
                         isPaused = true;
-                        pauseButton.textContent = "2. Tiếp tục (Thu 3s)";
+                        pauseButton.textContent = "2. Đo";
                         pauseButton.style.backgroundColor = "#28a745"; 
                     }
-                }, 3000); 
+                }, 2000); 
             }
         }
 
@@ -137,7 +171,6 @@
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 const source = audioCtx.createMediaStreamSource(stream);
                 
-                // Bộ lọc nhiễu tự động chạy ngầm
                 highpassFilter = audioCtx.createBiquadFilter();
                 highpassFilter.frequency.value = 80;
                 highpassFilter.type = 'highpass';
@@ -160,7 +193,7 @@
                 startButton.textContent = "Đã kết nối";
                 startButton.disabled = true;
                 pauseButton.disabled = false;
-                pauseButton.textContent = "2. Tiếp tục (Thu 3s)";
+                pauseButton.textContent = "2. Đo";
             } catch (err) {
                 alert("Không thể truy cập micro. Vui lòng cấp quyền! Lỗi: " + err);
             }
@@ -169,14 +202,14 @@
         pauseButton.addEventListener('click', () => {
             if (isPaused) {
                 isPaused = false;
-                pauseButton.textContent = "Đang thu (3s)...";
+                pauseButton.textContent = "Đang đo...";
                 pauseButton.style.backgroundColor = "#dc3545"; 
                 draw(); 
                 triggerAutoStop(); 
             } else {
                 isPaused = true;
                 clearTimeout(stopTimer); 
-                pauseButton.textContent = "2. Tiếp tục (Thu 3s)";
+                pauseButton.textContent = "2. Đo";
                 pauseButton.style.backgroundColor = "#28a745"; 
             }
         });
@@ -193,14 +226,26 @@
             
             if (!isPaused) {
                 analyser.getByteTimeDomainData(dataArray);
+                // Phân tích tần số từ âm thanh thực tế thu vào
+                let freq = autoCorrelate(dataArray, sampleRate);
+                if (freq > 50 && freq < 2000) {
+                    detectedFrequency = freq;
+                }
             }
 
+            // Tính khoảng thời gian sao cho đúng 6 chu kỳ (6 * T = 6 / f) hiển thị trên toàn màn hình
+            let period = 1.0 / detectedFrequency;
+            let totalTimeOnScreen = 6 * period; 
+
+            // Cập nhật thông tin lên bảng nhỏ
+            infoText.textContent = `Tần số: ${detectedFrequency.toFixed(1)} Hz | 6 Chu kỳ: ${(totalTimeOnScreen * 1000).toFixed(1)} ms`;
+
             const zoomY = 2.0;               
-            const totalTimeOnScreen = 0.04; 
 
             canvasCtx.fillStyle = '#e6f7ff'; 
             canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
 
+            // Vẽ lưới ô ly (10 ô trục X)
             canvasCtx.strokeStyle = '#b3e0ff'; 
             canvasCtx.lineWidth = 1;
             const stepX = canvas.width / 10;  
@@ -217,6 +262,7 @@
             }
             canvasCtx.stroke();
 
+            // Vẽ trục tọa độ
             canvasCtx.lineWidth = 2;
             canvasCtx.strokeStyle = '#000000'; 
             canvasCtx.beginPath();
@@ -226,16 +272,18 @@
             canvasCtx.lineTo(canvas.width / 2, canvas.height);
             canvasCtx.stroke();
 
+            // Ghi chú số liệu thời gian tự động theo 6 chu kỳ
             canvasCtx.fillStyle = '#000000'; 
-            canvasCtx.font = 'bold 13px Arial';
+            canvasCtx.font = 'bold 15px Arial';
             
             canvasCtx.textAlign = 'center';
             canvasCtx.textBaseline = 'top';
+            let timePerGrid = totalTimeOnScreen / 10;
             for(let i = 0; i <= 10; i++) {
                 if (i !== 5) { 
-                    let t_val = parseFloat(((i - 5) * 0.004).toFixed(3));
-                    let t_str = t_val.toString().replace('.', ',');
-                    canvasCtx.fillText(t_str + "s", i * stepX, canvas.height / 2 + 5);
+                    let t_val = parseFloat(((i - 5) * timePerGrid).toFixed(4));
+                    let t_str = (t_val * 1000).toFixed(1).replace('.', ',') + "ms"; 
+                    canvasCtx.fillText(t_str, i * stepX, canvas.height / 2 + 8);
                 }
             }
             
@@ -249,10 +297,11 @@
                     let val_str = parseFloat(val.toFixed(3)).toString().replace('.', ',');
                     canvasCtx.fillText(val_str, canvas.width / 2 + 8, i * stepY);
                 } else {
-                    canvasCtx.fillText("0", canvas.width / 2 + 8, canvas.height / 2 - 12); 
+                    canvasCtx.fillText("0", canvas.width / 2 + 8, canvas.height / 2 - 15); 
                 }
             }
 
+            // Vẽ sóng đỏ
             if (!isPaused || dataArray[0] !== 0) {
                 canvasCtx.lineWidth = 3; 
                 canvasCtx.strokeStyle = '#ff0000'; 
