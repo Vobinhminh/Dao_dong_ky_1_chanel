@@ -151,6 +151,7 @@
         let isPaused = true; 
         let sampleRate = 48000; 
         let detectedFrequency = 0; 
+        let lastCorrelateTime = 0; // Biến chống lag
         
         function resizeCanvas() {
             canvas.width = canvas.clientWidth;
@@ -159,7 +160,7 @@
         }
         window.addEventListener('resize', resizeCanvas);
 
-        // Xử lý bật/tắt toàn màn hình tương thích đa nền tảng
+        // Chức năng toàn màn hình
         fullscreenButton.addEventListener('click', () => {
             let elem = document.documentElement;
             let isFullscreen = document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement;
@@ -167,14 +168,14 @@
             if (!isFullscreen) {
                 if (elem.requestFullscreen) {
                     elem.requestFullscreen().catch(err => {
-                        alert("Thiết bị này không hỗ trợ Fullscreen (thường gặp trên iPhone). Bạn hãy xoay ngang màn hình điện thoại để đồ thị to hơn nhé!");
+                        alert("Thiết bị không hỗ trợ Fullscreen. Hãy xoay ngang điện thoại để xem đồ thị to hơn nhé!");
                     });
                 } else if (elem.webkitRequestFullscreen) { 
                     elem.webkitRequestFullscreen();
                 } else if (elem.msRequestFullscreen) { 
                     elem.msRequestFullscreen();
                 } else {
-                    alert("Trình duyệt điện thoại của bạn không hỗ trợ chức năng toàn màn hình. Hãy xoay ngang điện thoại để xem rõ hơn.");
+                    alert("Hãy xoay ngang điện thoại để xem rõ hơn.");
                 }
             } else {
                 if (document.exitFullscreen) {
@@ -258,8 +259,8 @@
                 lowpassFilter.type = 'lowpass';
 
                 analyser = audioCtx.createAnalyser();
-                // NÂNG CẤP BỘ NHỚ LÊN TỐI ĐA 32768 để chống mất sóng trục X khi Zoom X
-                analyser.fftSize = 32768; 
+                // Nâng cấp: Để 16384 là mức chuẩn, đủ bắt sóng dài mà không gây tràn RAM
+                analyser.fftSize = 16384; 
                 
                 source.connect(highpassFilter);
                 highpassFilter.connect(lowpassFilter);
@@ -333,9 +334,14 @@
             
             if (!isPaused && !isReset) {
                 analyser.getByteTimeDomainData(dataArray);
-                // Trích xuất 2048 mẫu đầu tiên để tính tần số nhanh, tránh giật lag trình duyệt
-                let freq = autoCorrelate(dataArray.slice(0, 2048), sampleRate);
-                if (freq > 50 && freq < 2000) detectedFrequency = freq;
+                
+                // GIẢI PHÁP CHỐNG LAG: Chỉ cập nhật tần số 3 lần/giây thay vì 60 lần/giây
+                let now = Date.now();
+                if (now - lastCorrelateTime > 300) {
+                    let freq = autoCorrelate(dataArray.slice(0, 2048), sampleRate);
+                    if (freq > 50 && freq < 2000) detectedFrequency = freq;
+                    lastCorrelateTime = now;
+                }
             }
 
             const zoomY = parseFloat(zoomYSlider.value);
@@ -420,11 +426,10 @@
 
             if (isReset) return;
 
-            // Vẽ đồ thị âm thanh (Clip cắt xén không gian cho CẢ TRỤC X VÀ TRỤC Y)
+            // Vẽ đồ thị âm thanh (Chống tràn biên)
             if (!isPaused || dataArray[0] !== 0) {
                 canvasCtx.save(); 
                 
-                // Khung cắt bảo vệ toàn bộ 4 cạnh (Trái, Phải, Trên, Dưới) của màn hình
                 canvasCtx.beginPath();
                 canvasCtx.rect(0, 0, canvas.width, canvas.height);
                 canvasCtx.clip(); 
@@ -450,7 +455,6 @@
                     }
 
                     x += sliceWidth;
-                    // Tự động ngắt vẽ khi sóng đi vượt mép phải màn hình để tối ưu hiệu năng
                     if (x > canvas.width) break; 
                 }
                 canvasCtx.stroke();
