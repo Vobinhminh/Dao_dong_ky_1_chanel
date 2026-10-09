@@ -134,6 +134,7 @@
         let sampleRate = 48000; 
         let stopTimer; 
 
+        // Khởi tạo mặc định khoảng thời gian hiển thị chuẩn xác là 0.2s (200ms) cho mọi nguồn âm
         let totalTimeOnScreen = 0.2; 
         let currentZoomY = 2.0;
         
@@ -172,6 +173,7 @@
                 totalTimeOnScreen = startDuration * (dx / initialPinchDistX);
                 currentZoomY = startZoomY * (dy / initialPinchDistY);
 
+                // Giới hạn thời gian hiển thị từ 0.1s đến 1.0s khi người dùng tự chủ động zoom
                 totalTimeOnScreen = Math.max(0.1, Math.min(totalTimeOnScreen, 1.0));
                 currentZoomY = Math.max(0.5, Math.min(currentZoomY, 10.0));
 
@@ -242,7 +244,7 @@
                         isPaused = true;
                         pauseButton.textContent = "2. Đo / Dừng";
                         pauseButton.style.backgroundColor = "#28a745"; 
-                        infoText.textContent = "Đã dừng (2s)";
+                        infoText.textContent = "Đã dừng (2s) - Hiển thị chuẩn 0.2s";
                         infoText.style.color = "#d93025";
                     }
                 }, 2000); 
@@ -283,7 +285,7 @@
                 resetButton.disabled = false;
                 saveButton.disabled = false;
                 
-                infoText.textContent = "Đang chờ bật Micro...";
+                infoText.textContent = "Trạng thái: Đã sẵn sàng";
                 infoText.style.color = "#007bff";
             } catch (err) {
                 alert("Không thể truy cập micro. Lỗi: " + err);
@@ -295,7 +297,7 @@
                 isPaused = false;
                 pauseButton.textContent = "Đang đo...";
                 pauseButton.style.backgroundColor = "#dc3545"; 
-                infoText.textContent = "Đang ghi âm trong 2 giây...";
+                infoText.textContent = "Đang ghi âm trong 2 giây (0.2s / khung hình)...";
                 infoText.style.color = "#dc3545";
                 draw(); 
                 triggerAutoStop(); 
@@ -315,10 +317,11 @@
             pauseButton.textContent = "2. Đo / Dừng";
             pauseButton.style.backgroundColor = "#28a745"; 
             
+            // Đưa khoảng thời gian về lại đúng chuẩn mặc định 0.2s
             totalTimeOnScreen = 0.2; 
             currentZoomY = 2.0; 
             
-            infoText.textContent = "Đang chờ bật Micro...";
+            infoText.textContent = "Trạng thái: Đã sẵn sàng";
             infoText.style.color = "#007bff";
             
             drawFrame(true); 
@@ -385,11 +388,23 @@
             }
             canvasCtx.stroke();
 
-            // ĐÃ BỎ TOÀN BỘ CHỮ SỐ TRÊN TRỤC X ĐỂ ĐỒ THỊ SẠCH SẼ
-            
-            // Ghi số liệu lên trục Y
+            // Hiển thị con số trên trục X dựa trên totalTimeOnScreen hiện tại (mặc định 0.2s = 200ms)
             canvasCtx.fillStyle = '#000000'; 
             canvasCtx.font = 'bold 13px Arial';
+            canvasCtx.textAlign = 'center';
+            canvasCtx.textBaseline = 'top';
+            let timePerGrid = totalTimeOnScreen / 10;
+            for(let i = 0; i <= 10; i++) {
+                if (i !== 5) { 
+                    let t_val = (i - 5) * timePerGrid;
+                    let t_str = (t_val * 1000).toFixed(1).replace('.', ','); 
+                    canvasCtx.fillText(t_str, i * stepX, canvas.height / 2 + 10);
+                }
+            }
+            canvasCtx.textAlign = 'right';
+            canvasCtx.fillText("t (ms)", canvas.width - 10, canvas.height / 2 - 25);
+            
+            // Ghi số liệu lên trục Y
             canvasCtx.textAlign = 'left';
             canvasCtx.textBaseline = 'middle';
             const maxY = 1.0 / zoomY; 
