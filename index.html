@@ -151,7 +151,8 @@
         let isPaused = true; 
         let sampleRate = 48000; 
         let detectedFrequency = 0; 
-        let lastCorrelateTime = 0; // Biến chống lag
+        let lastCorrelateTime = 0; 
+        let stopTimer; // Biến lưu thời gian tự dừng
         
         function resizeCanvas() {
             canvas.width = canvas.clientWidth;
@@ -160,7 +161,6 @@
         }
         window.addEventListener('resize', resizeCanvas);
 
-        // Chức năng toàn màn hình
         fullscreenButton.addEventListener('click', () => {
             let elem = document.documentElement;
             let isFullscreen = document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement;
@@ -241,6 +241,22 @@
             return sampleRate / maxpos;
         }
 
+        // HÀM TỰ ĐỘNG DỪNG ĐO SAU 2 GIÂY
+        function triggerAutoStop() {
+            clearTimeout(stopTimer);
+            if (!isPaused) {
+                stopTimer = setTimeout(() => {
+                    if (!isPaused) {
+                        isPaused = true;
+                        pauseButton.textContent = "2. Đo / Dừng";
+                        pauseButton.style.backgroundColor = "#28a745"; 
+                        infoText.textContent = "Đã dừng (2s) - Hãy xác định chu kỳ T và tần số f";
+                        infoText.style.color = "#d93025";
+                    }
+                }, 2000); // 2000 ms = 2 giây
+            }
+        }
+
         startButton.addEventListener('click', async () => {
             if (!audioCtx) {
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -259,7 +275,6 @@
                 lowpassFilter.type = 'lowpass';
 
                 analyser = audioCtx.createAnalyser();
-                // Nâng cấp: Để 16384 là mức chuẩn, đủ bắt sóng dài mà không gây tràn RAM
                 analyser.fftSize = 16384; 
                 
                 source.connect(highpassFilter);
@@ -288,11 +303,13 @@
                 isPaused = false;
                 pauseButton.textContent = "Đang đo...";
                 pauseButton.style.backgroundColor = "#dc3545"; 
-                infoText.textContent = "Trạng thái: Đang ghi sóng âm...";
+                infoText.textContent = "Trạng thái: Đang ghi sóng âm (Tự động dừng sau 2s)...";
                 infoText.style.color = "#dc3545";
                 draw(); 
+                triggerAutoStop(); // Gọi hàm tự dừng sau 2 giây
             } else {
                 isPaused = true;
+                clearTimeout(stopTimer); // Hủy đếm ngược nếu người dùng tự bấm dừng sớm
                 pauseButton.textContent = "2. Đo / Dừng";
                 pauseButton.style.backgroundColor = "#28a745"; 
                 infoText.textContent = "Đã dừng - Hãy xác định chu kỳ T và tần số f";
@@ -302,6 +319,7 @@
 
         resetButton.addEventListener('click', () => {
             isPaused = true;
+            clearTimeout(stopTimer); // Hủy đếm ngược
             pauseButton.textContent = "2. Đo / Dừng";
             pauseButton.style.backgroundColor = "#28a745"; 
             
@@ -335,7 +353,6 @@
             if (!isPaused && !isReset) {
                 analyser.getByteTimeDomainData(dataArray);
                 
-                // GIẢI PHÁP CHỐNG LAG: Chỉ cập nhật tần số 3 lần/giây thay vì 60 lần/giây
                 let now = Date.now();
                 if (now - lastCorrelateTime > 300) {
                     let freq = autoCorrelate(dataArray.slice(0, 2048), sampleRate);
@@ -426,7 +443,7 @@
 
             if (isReset) return;
 
-            // Vẽ đồ thị âm thanh (Chống tràn biên)
+            // Vẽ đồ thị âm thanh
             if (!isPaused || dataArray[0] !== 0) {
                 canvasCtx.save(); 
                 
