@@ -114,7 +114,7 @@
             <button id="fullscreenButton">5. Toàn màn hình</button>
         </div>
         
-        <div class="info-panel" id="infoText">Đang chờ bật Micro... (Chuẩn 5 chu kỳ)</div>
+        <div class="info-panel" id="infoText">Đang chờ bật Micro... (Trục X: 0.1s đến 1.0s)</div>
     </div>
 
     <canvas id="oscilloscope"></canvas>
@@ -132,11 +132,11 @@
         let audioCtx, analyser, highpassFilter, lowpassFilter;
         let isPaused = true; 
         let sampleRate = 48000; 
-        let detectedFrequency = 0; 
-        let lastCorrelateTime = 0; 
         let stopTimer; 
 
-        let currentZoomX = 1.0;
+        // Quản lý khoảng thời gian hiển thị trên màn hình (tính bằng giây)
+        // Mặc định 0.2s, Thấp nhất 0.1s, Cao nhất 1.0s
+        let totalTimeOnScreen = 0.2; 
         let currentZoomY = 2.0;
         
         function resizeCanvas() {
@@ -148,7 +148,7 @@
 
         let initialPinchDistX = 0;
         let initialPinchDistY = 0;
-        let startZoomX = 1.0;
+        let startDuration = 0.2;
         let startZoomY = 2.0;
 
         canvas.addEventListener('touchstart', (e) => {
@@ -158,7 +158,7 @@
                 let dy = Math.abs(e.touches[0].clientY - e.touches[1].clientY);
                 initialPinchDistX = Math.max(dx, 10); 
                 initialPinchDistY = Math.max(dy, 10);
-                startZoomX = currentZoomX;
+                startDuration = totalTimeOnScreen;
                 startZoomY = currentZoomY;
             }
         }, {passive: false});
@@ -171,10 +171,12 @@
                 dx = Math.max(dx, 10);
                 dy = Math.max(dy, 10);
 
-                currentZoomX = startZoomX * (initialPinchDistX / dx);
+                // Vuốt ra ngang thì phóng to chi tiết (giảm thời gian hiển thị xuống tối thiểu 0.1s)
+                totalTimeOnScreen = startDuration * (dx / initialPinchDistX);
                 currentZoomY = startZoomY * (dy / initialPinchDistY);
 
-                currentZoomX = Math.max(0.4, Math.min(currentZoomX, 2.0));
+                // GIỚI HẠN TRỤC X: Thấp nhất 0.1s, Cao nhất 1.0s
+                totalTimeOnScreen = Math.max(0.1, Math.min(totalTimeOnScreen, 1.0));
                 currentZoomY = Math.max(0.5, Math.min(currentZoomY, 10.0));
 
                 if (isPaused) drawFrame();
@@ -184,10 +186,12 @@
         canvas.addEventListener('wheel', (e) => {
             e.preventDefault();
             if (e.shiftKey) {
-                if (e.deltaY > 0) currentZoomX *= 1.1;
-                else currentZoomX /= 1.1;
-                currentZoomX = Math.max(0.4, Math.min(currentZoomX, 2.0));
+                // Shift + Cuộn -> Trục X (Thời gian tổng hiển thị)
+                if (e.deltaY > 0) totalTimeOnScreen *= 1.1;
+                else totalTimeOnScreen /= 1.1;
+                totalTimeOnScreen = Math.max(0.1, Math.min(totalTimeOnScreen, 1.0));
             } else {
+                // Chỉ cuộn -> Trục Y (Biên độ)
                 if (e.deltaY < 0) currentZoomY *= 1.1; 
                 else currentZoomY /= 1.1; 
                 currentZoomY = Math.max(0.5, Math.min(currentZoomY, 10.0));
@@ -236,40 +240,6 @@
         document.addEventListener('webkitfullscreenchange', updateFullscreenButton);
         document.addEventListener('MSFullscreenChange', updateFullscreenButton);
 
-        // Thuật toán autoCorrelate đã được siết chặt chống bắt nhầm tần số thấp
-        function autoCorrelate(buffer, sampleRate) {
-            let SIZE = buffer.length;
-            let sumSq = 0;
-            for (let i = 0; i < SIZE; i++) {
-                let val = (buffer[i] - 128) / 128;
-                sumSq += val * val;
-            }
-            let rootMeanSq = Math.sqrt(sumSq / SIZE);
-            if (rootMeanSq < 0.02) return -1; 
-
-            let c = new Array(SIZE).fill(0);
-            for (let i = 0; i < SIZE / 2; i++) {
-                for (let j = 0; j < SIZE - i; j++) {
-                    let v1 = (buffer[j] - 128) / 128;
-                    let v2 = (buffer[j + i] - 128) / 128;
-                    c[i] += v1 * v2;
-                }
-            }
-
-            let d = 0;
-            while (c[d] > c[d + 1] && d < SIZE / 2) d++;
-            let maxval = -1, maxpos = -1;
-            for (let i = d; i < SIZE / 2; i++) {
-                if (c[i] > maxval) { maxval = c[i]; maxpos = i; }
-            }
-            
-            if (maxpos <= 0) return -1;
-            let freq = sampleRate / maxpos;
-            // Ép dải tần số âm thanh thực tế từ 100Hz đến 1500Hz để tránh lỗi bắt sóng lạ
-            if (freq < 100 || freq > 1500) return -1;
-            return freq;
-        }
-
         function triggerAutoStop() {
             clearTimeout(stopTimer);
             if (!isPaused) {
@@ -278,7 +248,7 @@
                         isPaused = true;
                         pauseButton.textContent = "2. Đo / Dừng";
                         pauseButton.style.backgroundColor = "#28a745"; 
-                        infoText.textContent = "Đã dừng (2s) - Đảm bảo chuẩn 5 chu kỳ";
+                        infoText.textContent = "Đã dừng (2s) - Trục X từ 0.1s đến 1.0s";
                         infoText.style.color = "#d93025";
                     }
                 }, 2000); 
@@ -295,15 +265,15 @@
                 const source = audioCtx.createMediaStreamSource(stream);
                 
                 highpassFilter = audioCtx.createBiquadFilter();
-                highpassFilter.frequency.value = 100; // Nâng nhẹ bộ lọc để lọc triệt để tiếng ồn trầm
+                highpassFilter.frequency.value = 80;
                 highpassFilter.type = 'highpass';
 
                 lowpassFilter = audioCtx.createBiquadFilter();
-                lowpassFilter.frequency.value = 2000;
+                lowpassFilter.frequency.value = 3000;
                 lowpassFilter.type = 'lowpass';
 
                 analyser = audioCtx.createAnalyser();
-                analyser.fftSize = 16384; 
+                analyser.fftSize = 32768; 
                 
                 source.connect(highpassFilter);
                 highpassFilter.connect(lowpassFilter);
@@ -331,7 +301,7 @@
                 isPaused = false;
                 pauseButton.textContent = "Đang đo...";
                 pauseButton.style.backgroundColor = "#dc3545"; 
-                infoText.textContent = "Đang ghi âm trong 2 giây (Chụp 5 chu kỳ chuẩn)...";
+                infoText.textContent = "Đang ghi âm trong 2 giây...";
                 infoText.style.color = "#dc3545";
                 draw(); 
                 triggerAutoStop(); 
@@ -340,7 +310,7 @@
                 clearTimeout(stopTimer); 
                 pauseButton.textContent = "2. Đo / Dừng";
                 pauseButton.style.backgroundColor = "#28a745"; 
-                infoText.textContent = "Đã dừng - Chuẩn 5 chu kỳ";
+                infoText.textContent = "Đã dừng - Trục X từ 0.1s đến 1.0s";
                 infoText.style.color = "#d93025";
             }
         });
@@ -351,8 +321,7 @@
             pauseButton.textContent = "2. Đo / Dừng";
             pauseButton.style.backgroundColor = "#28a745"; 
             
-            detectedFrequency = 0;
-            currentZoomX = 1.0; 
+            totalTimeOnScreen = 0.2; // Trả về mặc định 0.2s
             currentZoomY = 2.0; 
             
             infoText.textContent = "Sẵn sàng - Bấm 'Đo / Dừng' để đo lần tiếp theo";
@@ -380,25 +349,14 @@
             
             if (!isPaused && !isReset) {
                 analyser.getByteTimeDomainData(dataArray);
-                let now = Date.now();
-                if (now - lastCorrelateTime > 300) {
-                    let freq = autoCorrelate(dataArray, sampleRate);
-                    // Nếu phát hiện tần số hợp lệ, cập nhật. Nếu không, giữ nguyên hoặc dùng 440Hz chuẩn
-                    if (freq > 0) detectedFrequency = freq;
-                    lastCorrelateTime = now;
-                }
             }
 
             const zoomY = currentZoomY;
-            const zoomX = currentZoomX;
-
-            let freqForCalc = (detectedFrequency > 0 && !isReset) ? detectedFrequency : 440; 
-            let period = 1.0 / freqForCalc;
-            let totalTimeOnScreen = 5 * period * zoomX; 
 
             canvasCtx.fillStyle = '#e6f7ff'; 
             canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
 
+            // Vẽ lưới 10x8
             canvasCtx.strokeStyle = '#b3e0ff'; 
             canvasCtx.lineWidth = 1;
             const stepX = canvas.width / 10;  
@@ -413,6 +371,7 @@
             }
             canvasCtx.stroke();
 
+            // Vẽ trục tọa độ chính giữa
             canvasCtx.lineWidth = 2;
             canvasCtx.strokeStyle = '#000000'; 
             canvasCtx.beginPath();
@@ -432,21 +391,23 @@
             }
             canvasCtx.stroke();
 
+            // Ghi số liệu lên trục X theo khoảng thời gian thực (tính bằng ms)
             canvasCtx.fillStyle = '#000000'; 
-            canvasCtx.font = 'bold 14px Arial';
+            canvasCtx.font = 'bold 13px Arial';
             canvasCtx.textAlign = 'center';
             canvasCtx.textBaseline = 'top';
             let timePerGrid = totalTimeOnScreen / 10;
             for(let i = 0; i <= 10; i++) {
                 if (i !== 5) { 
-                    let t_val = parseFloat(((i - 5) * timePerGrid).toFixed(4));
-                    let t_str = (t_val * 1000).toFixed(1).replace('.', ','); 
+                    let t_val = (i - 5) * timePerGrid; // Thời gian tính bằng giây
+                    let t_str = (t_val * 1000).toFixed(1).replace('.', ','); // Đổi ra ms cho dễ đọc
                     canvasCtx.fillText(t_str, i * stepX, canvas.height / 2 + 10);
                 }
             }
             canvasCtx.textAlign = 'right';
             canvasCtx.fillText("t (ms)", canvas.width - 10, canvas.height / 2 - 25);
             
+            // Ghi số liệu lên trục Y
             canvasCtx.textAlign = 'left';
             canvasCtx.textBaseline = 'middle';
             const maxY = 1.0 / zoomY; 
@@ -465,6 +426,7 @@
 
             if (isReset) return;
 
+            // Vẽ toàn bộ sóng thu được phù hợp chính xác với khoảng thời gian chia trên trục X
             if (!isPaused || dataArray[0] !== 0) {
                 canvasCtx.save(); 
                 
@@ -476,13 +438,20 @@
                 canvasCtx.strokeStyle = '#ff0000'; 
                 canvasCtx.beginPath();
 
+                // Ánh xạ chính xác khoảng thời gian totalTimeOnScreen vào bề rộng canvas
                 const samplesNeeded = Math.floor(totalTimeOnScreen * sampleRate);
                 const sliceWidth = canvas.width / samplesNeeded;
                 let x = 0;
                 let hasMoved = false;
 
-                for (let i = 0; i < bufferLength && i < samplesNeeded; i++) {
-                    const v = dataArray[i] ? dataArray[i] / 128.0 : 1.0; 
+                // Lấy tâm buffer làm mốc hiển thị giữa màn hình
+                const centerBuffer = Math.floor(bufferLength / 2);
+                const halfSamples = Math.floor(samplesNeeded / 2);
+                const startIndex = Math.max(0, centerBuffer - halfSamples);
+                const endIndex = Math.min(bufferLength, centerBuffer + halfSamples);
+
+                for (let i = startIndex; i < endIndex; i++) {
+                    const v = dataArray[i] / 128.0; 
                     let y = (v - 1.0) * zoomY * (canvas.height / 2) + (canvas.height / 2);
                     
                     if (!hasMoved) {
