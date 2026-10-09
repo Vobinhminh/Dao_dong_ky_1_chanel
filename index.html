@@ -114,7 +114,7 @@
             <button id="fullscreenButton">5. Toàn màn hình</button>
         </div>
         
-        <div class="info-panel" id="infoText">Đang chờ bật Micro... (Vuốt chạm để Zoom đồ thị)</div>
+        <div class="info-panel" id="infoText">Đang chờ bật Micro... (Mặc định 5 chu kỳ, vuốt từ 2T đến 10T)</div>
     </div>
 
     <canvas id="oscilloscope"></canvas>
@@ -136,7 +136,7 @@
         let lastCorrelateTime = 0; 
         let stopTimer; 
 
-        // Zoom mặc định hiển thị 5 chu kỳ
+        // Khởi tạo mặc định Zoom X = 1.0 (hiển thị đúng 5 chu kỳ)
         let currentZoomX = 1.0;
         let currentZoomY = 2.0;
         
@@ -175,9 +175,9 @@
                 currentZoomX = startZoomX * (initialPinchDistX / dx);
                 currentZoomY = startZoomY * (dy / initialPinchDistY);
 
-                // CHỐT: Tối thiểu 2 chu kỳ (Zoom 0.4), Tối đa 10 chu kỳ (Zoom 2.0)
+                // CHỐT GIỚI HẠN: Thấp nhất 2 chu kỳ (0.4), Cao nhất 10 chu kỳ (2.0)
                 currentZoomX = Math.max(0.4, Math.min(currentZoomX, 2.0));
-                currentZoomY = Math.max(0.5, Math.min(currentZoomY, 10.0)); // Biên độ Y vừa đủ
+                currentZoomY = Math.max(0.5, Math.min(currentZoomY, 10.0));
 
                 if (isPaused) drawFrame();
             }
@@ -285,7 +285,7 @@
                         isPaused = true;
                         pauseButton.textContent = "2. Đo / Dừng";
                         pauseButton.style.backgroundColor = "#28a745"; 
-                        infoText.textContent = "Đã dừng (2s) - Chạm vuốt để Zoom đồ thị";
+                        infoText.textContent = "Đã dừng (2s) - Mặc định 5T (Vuốt từ 2T đến 10T)";
                         infoText.style.color = "#d93025";
                     }
                 }, 2000); 
@@ -310,7 +310,6 @@
                 lowpassFilter.type = 'lowpass';
 
                 analyser = audioCtx.createAnalyser();
-                // Bật bộ nhớ tối đa để chống đứt sóng khi Zoom 10 chu kỳ
                 analyser.fftSize = 32768; 
                 
                 source.connect(highpassFilter);
@@ -339,7 +338,7 @@
                 isPaused = false;
                 pauseButton.textContent = "Đang đo...";
                 pauseButton.style.backgroundColor = "#dc3545"; 
-                infoText.textContent = "Đang ghi âm (Tự động dừng sau 2s)...";
+                infoText.textContent = "Đang ghi âm trong 2 giây (Chụp 5 chu kỳ)...";
                 infoText.style.color = "#dc3545";
                 draw(); 
                 triggerAutoStop(); 
@@ -348,7 +347,7 @@
                 clearTimeout(stopTimer); 
                 pauseButton.textContent = "2. Đo / Dừng";
                 pauseButton.style.backgroundColor = "#28a745"; 
-                infoText.textContent = "Đã dừng - Chạm vuốt để Zoom đồ thị";
+                infoText.textContent = "Đã dừng - Mặc định 5T (Vuốt từ 2T đến 10T)";
                 infoText.style.color = "#d93025";
             }
         });
@@ -360,7 +359,7 @@
             pauseButton.style.backgroundColor = "#28a745"; 
             
             detectedFrequency = 0;
-            currentZoomX = 1.0; 
+            currentZoomX = 1.0; // Trả về mặc định đúng 5 chu kỳ
             currentZoomY = 2.0; 
             
             infoText.textContent = "Sẵn sàng - Bấm 'Đo / Dừng' để đo lần tiếp theo";
@@ -383,7 +382,6 @@
                 return;
             }
             
-            // ÉP LẤY 100% BUFFER THAY VÌ 50% ĐỂ CHỐNG ĐỨT SÓNG
             const bufferLength = analyser.fftSize; 
             const dataArray = new Uint8Array(bufferLength);
             
