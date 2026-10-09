@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dao động ký (Oscilloscope) - Sóng âm</title>
     <style>
+        /* Biến trang web thành một App thực thụ, khóa cuộn trang, không khoảng trắng */
         html, body {
             margin: 0;
             padding: 0;
@@ -12,70 +13,65 @@
             height: 100%;
             background-color: #e6f7ff;
             font-family: sans-serif;
+            overflow: hidden; 
         }
 
         body {
             display: flex;
             flex-direction: column;
-            overflow-x: hidden;
         }
         
         .controls-wrapper {
             display: flex;
-            flex-wrap: wrap; 
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px 15px;
+            flex-direction: column;
+            padding: 8px;
             background-color: #f0f4f8;
             border-bottom: 3px solid #000;
-            box-sizing: border-box;
-            gap: 15px;
-            z-index: 10;
-            flex-shrink: 0; 
-        }
-
-        .btn-group {
-            display: flex; 
-            flex-wrap: wrap; 
-            gap: 10px; 
-            align-items: center;
-        }
-
-        .slider-group {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 20px;
-            background: #fff;
-            padding: 6px 12px;
-            border-radius: 6px;
-            border: 1px solid #ccc;
-            font-size: 14px;
-            font-weight: bold;
-        }
-
-        .slider-group label {
-            display: flex;
-            align-items: center;
             gap: 8px;
-            cursor: pointer;
+            z-index: 10;
+        }
+
+        /* Sử dụng CSS Grid để chia cột nút bấm khoa học */
+        .btn-group {
+            display: grid; 
+            grid-template-columns: repeat(5, 1fr); /* Mặc định máy tính: 5 cột */
+            gap: 8px; 
+            width: 100%;
+        }
+
+        /* Giao diện cho iPad / Tablet */
+        @media (max-width: 800px) {
+            .btn-group {
+                grid-template-columns: 1fr 1fr 1fr; /* 3 cột */
+            }
+        }
+
+        /* Giao diện cho Điện thoại di động */
+        @media (max-width: 500px) {
+            .btn-group {
+                grid-template-columns: 1fr 1fr; /* 2 cột vuông vức */
+            }
+            #fullscreenButton {
+                grid-column: span 2; /* Nút thứ 5 trải dài full 2 cột */
+            }
         }
 
         .info-panel {
             font-weight: bold;
-            font-size: 15px;
+            font-size: 14px;
             color: #d93025;
             background: #fff;
-            padding: 6px 12px;
+            padding: 8px;
             border-radius: 6px;
             border: 1px solid #ccc;
-            min-width: 200px;
+            width: 100%;
             text-align: center;
-            flex-grow: 1; 
+            box-sizing: border-box;
         }
 
         button {
-            padding: 8px 15px;
-            font-size: 14px;
+            padding: 10px 5px;
+            font-size: 13px;
             font-weight: bold;
             cursor: pointer;
             background-color: #007bff;
@@ -84,7 +80,8 @@
             border-radius: 6px;
             box-shadow: 0 3px 5px rgba(0,0,0,0.2);
             transition: background-color 0.2s;
-            white-space: nowrap;
+            width: 100%; /* Đảm bảo nút lấp đầy ô Grid */
+            box-sizing: border-box;
         }
         button:hover { background-color: #0056b3; }
         button:disabled {
@@ -101,11 +98,14 @@
             filter: brightness(0.9); 
         }
 
+        /* Đồ thị tự động co giãn lấp kín phần khoảng trống còn lại */
         canvas {
             flex-grow: 1;
             width: 100%;
-            min-height: 400px; 
+            height: 0; 
             display: block;
+            cursor: crosshair;
+            touch-action: none; /* Khóa vuốt mặc định của điện thoại để nhận Pinch-to-Zoom */
         }
     </style>
 </head>
@@ -119,18 +119,7 @@
             <button id="fullscreenButton">5. Toàn màn hình</button>
         </div>
         
-        <div class="slider-group">
-            <label>
-                Trục Y (Biên độ): 
-                <input type="range" id="zoomY" min="0.5" max="5.0" step="0.1" value="2.0">
-            </label>
-            <label>
-                Trục X (Thời gian): 
-                <input type="range" id="zoomX" min="0.2" max="3.0" step="0.1" value="1.0">
-            </label>
-        </div>
-
-        <div class="info-panel" id="infoText">Trạng thái: Đang chờ bật Micro...</div>
+        <div class="info-panel" id="infoText">Đang chờ bật Micro... (Vuốt chạm để Zoom đồ thị)</div>
     </div>
 
     <canvas id="oscilloscope"></canvas>
@@ -142,8 +131,6 @@
         const saveButton = document.getElementById('saveButton');
         const fullscreenButton = document.getElementById('fullscreenButton');
         const infoText = document.getElementById('infoText');
-        const zoomYSlider = document.getElementById('zoomY');
-        const zoomXSlider = document.getElementById('zoomX');
         const canvas = document.getElementById('oscilloscope');
         const canvasCtx = canvas.getContext('2d');
         
@@ -152,7 +139,11 @@
         let sampleRate = 48000; 
         let detectedFrequency = 0; 
         let lastCorrelateTime = 0; 
-        let stopTimer; // Biến lưu thời gian tự dừng
+        let stopTimer; 
+
+        // Biến lưu trữ mức độ Zoom cảm ứng
+        let currentZoomX = 1.0;
+        let currentZoomY = 2.0;
         
         function resizeCanvas() {
             canvas.width = canvas.clientWidth;
@@ -161,6 +152,57 @@
         }
         window.addEventListener('resize', resizeCanvas);
 
+        // --- CẢM ỨNG ĐA ĐIỂM VÀ CUỘN CHUỘT ---
+        let initialPinchDistX = 0;
+        let initialPinchDistY = 0;
+        let startZoomX = 1.0;
+        let startZoomY = 2.0;
+
+        canvas.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 2) {
+                e.preventDefault();
+                let dx = Math.abs(e.touches[0].clientX - e.touches[1].clientX);
+                let dy = Math.abs(e.touches[0].clientY - e.touches[1].clientY);
+                initialPinchDistX = Math.max(dx, 10); 
+                initialPinchDistY = Math.max(dy, 10);
+                startZoomX = currentZoomX;
+                startZoomY = currentZoomY;
+            }
+        }, {passive: false});
+
+        canvas.addEventListener('touchmove', (e) => {
+            if (e.touches.length === 2) {
+                e.preventDefault();
+                let dx = Math.abs(e.touches[0].clientX - e.touches[1].clientX);
+                let dy = Math.abs(e.touches[0].clientY - e.touches[1].clientY);
+                dx = Math.max(dx, 10);
+                dy = Math.max(dy, 10);
+
+                currentZoomX = startZoomX * (initialPinchDistX / dx);
+                currentZoomY = startZoomY * (dy / initialPinchDistY);
+
+                currentZoomX = Math.max(0.1, Math.min(currentZoomX, 5.0));
+                currentZoomY = Math.max(0.5, Math.min(currentZoomY, 15.0));
+
+                if (isPaused) drawFrame();
+            }
+        }, {passive: false});
+
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            if (e.shiftKey) {
+                if (e.deltaY > 0) currentZoomX *= 1.1;
+                else currentZoomX /= 1.1;
+                currentZoomX = Math.max(0.1, Math.min(currentZoomX, 5.0));
+            } else {
+                if (e.deltaY < 0) currentZoomY *= 1.1; 
+                else currentZoomY /= 1.1; 
+                currentZoomY = Math.max(0.5, Math.min(currentZoomY, 15.0));
+            }
+            if (isPaused) drawFrame();
+        }, {passive: false});
+
+        // --- TOÀN MÀN HÌNH ---
         fullscreenButton.addEventListener('click', () => {
             let elem = document.documentElement;
             let isFullscreen = document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement;
@@ -168,7 +210,7 @@
             if (!isFullscreen) {
                 if (elem.requestFullscreen) {
                     elem.requestFullscreen().catch(err => {
-                        alert("Thiết bị không hỗ trợ Fullscreen. Hãy xoay ngang điện thoại để xem đồ thị to hơn nhé!");
+                        alert("Xoay ngang điện thoại để xem đồ thị to hơn nhé!");
                     });
                 } else if (elem.webkitRequestFullscreen) { 
                     elem.webkitRequestFullscreen();
@@ -193,7 +235,7 @@
             if (!isFullscreen) {
                 fullscreenButton.textContent = "5. Toàn màn hình";
             } else {
-                fullscreenButton.textContent = "5. Thu nhỏ (Thoát)";
+                fullscreenButton.textContent = "5. Thu nhỏ";
             }
             setTimeout(resizeCanvas, 100); 
         }
@@ -202,6 +244,7 @@
         document.addEventListener('webkitfullscreenchange', updateFullscreenButton);
         document.addEventListener('MSFullscreenChange', updateFullscreenButton);
 
+        // --- XỬ LÝ ÂM THANH VÀ ĐỒ THỊ ---
         function autoCorrelate(buffer, sampleRate) {
             let SIZE = buffer.length;
             let sumSq = 0;
@@ -241,7 +284,6 @@
             return sampleRate / maxpos;
         }
 
-        // HÀM TỰ ĐỘNG DỪNG ĐO SAU 2 GIÂY
         function triggerAutoStop() {
             clearTimeout(stopTimer);
             if (!isPaused) {
@@ -250,10 +292,10 @@
                         isPaused = true;
                         pauseButton.textContent = "2. Đo / Dừng";
                         pauseButton.style.backgroundColor = "#28a745"; 
-                        infoText.textContent = "Đã dừng (2s) - Hãy xác định chu kỳ T và tần số f";
+                        infoText.textContent = "Đã dừng (2s) - Chạm vuốt để Zoom đồ thị";
                         infoText.style.color = "#d93025";
                     }
-                }, 2000); // 2000 ms = 2 giây
+                }, 2000); 
             }
         }
 
@@ -285,7 +327,7 @@
                 resizeCanvas();
                 drawFrame(); 
                 
-                startButton.textContent = "Đã kết nối micro";
+                startButton.textContent = "Đã kết nối";
                 startButton.disabled = true;
                 pauseButton.disabled = false;
                 resetButton.disabled = false;
@@ -303,31 +345,34 @@
                 isPaused = false;
                 pauseButton.textContent = "Đang đo...";
                 pauseButton.style.backgroundColor = "#dc3545"; 
-                infoText.textContent = "Trạng thái: Đang ghi sóng âm (Tự động dừng sau 2s)...";
+                infoText.textContent = "Đang ghi âm (Tự động dừng sau 2s)...";
                 infoText.style.color = "#dc3545";
                 draw(); 
-                triggerAutoStop(); // Gọi hàm tự dừng sau 2 giây
+                triggerAutoStop(); 
             } else {
                 isPaused = true;
-                clearTimeout(stopTimer); // Hủy đếm ngược nếu người dùng tự bấm dừng sớm
+                clearTimeout(stopTimer); 
                 pauseButton.textContent = "2. Đo / Dừng";
                 pauseButton.style.backgroundColor = "#28a745"; 
-                infoText.textContent = "Đã dừng - Hãy xác định chu kỳ T và tần số f";
+                infoText.textContent = "Đã dừng - Chạm vuốt để Zoom đồ thị";
                 infoText.style.color = "#d93025";
             }
         });
 
         resetButton.addEventListener('click', () => {
             isPaused = true;
-            clearTimeout(stopTimer); // Hủy đếm ngược
+            clearTimeout(stopTimer); 
             pauseButton.textContent = "2. Đo / Dừng";
             pauseButton.style.backgroundColor = "#28a745"; 
             
             detectedFrequency = 0;
-            infoText.textContent = "Trạng thái: Đã sẵn sàng";
+            currentZoomX = 1.0; 
+            currentZoomY = 2.0; 
+            
+            infoText.textContent = "Sẵn sàng - Bấm 'Đo / Dừng' để đo lần tiếp theo";
             infoText.style.color = "#007bff";
             
-            drawFrame(true);
+            drawFrame(true); 
         });
 
         saveButton.addEventListener('click', () => {
@@ -336,9 +381,6 @@
             link.href = canvas.toDataURL('image/png');
             link.click();
         });
-
-        zoomXSlider.addEventListener('input', () => { if(isPaused) drawFrame(); });
-        zoomYSlider.addEventListener('input', () => { if(isPaused) drawFrame(); });
 
         function drawFrame(isReset = false) {
             if (!analyser) {
@@ -352,7 +394,6 @@
             
             if (!isPaused && !isReset) {
                 analyser.getByteTimeDomainData(dataArray);
-                
                 let now = Date.now();
                 if (now - lastCorrelateTime > 300) {
                     let freq = autoCorrelate(dataArray.slice(0, 2048), sampleRate);
@@ -361,18 +402,16 @@
                 }
             }
 
-            const zoomY = parseFloat(zoomYSlider.value);
-            const zoomX = parseFloat(zoomXSlider.value);
+            const zoomY = currentZoomY;
+            const zoomX = currentZoomX;
 
             let freqForCalc = (detectedFrequency > 0 && !isReset) ? detectedFrequency : 440; 
             let period = 1.0 / freqForCalc;
             let totalTimeOnScreen = 5 * period * zoomX; 
 
-            // Xóa nền
             canvasCtx.fillStyle = '#e6f7ff'; 
             canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Vẽ lưới
             canvasCtx.strokeStyle = '#b3e0ff'; 
             canvasCtx.lineWidth = 1;
             const stepX = canvas.width / 10;  
@@ -387,7 +426,6 @@
             }
             canvasCtx.stroke();
 
-            // Vẽ trục tọa độ chính
             canvasCtx.lineWidth = 2;
             canvasCtx.strokeStyle = '#000000'; 
             canvasCtx.beginPath();
@@ -396,7 +434,6 @@
             canvasCtx.moveTo(canvas.width / 2, 0);  
             canvasCtx.lineTo(canvas.width / 2, canvas.height);
             
-            // Vẽ các vạch chia nhỏ
             const tickSize = 5; 
             for(let i = 0; i <= 10; i++) {
                 canvasCtx.moveTo(i * stepX, canvas.height / 2 - tickSize);
@@ -408,7 +445,6 @@
             }
             canvasCtx.stroke();
 
-            // Ghi số liệu lên trục X
             canvasCtx.fillStyle = '#000000'; 
             canvasCtx.font = 'bold 14px Arial';
             canvasCtx.textAlign = 'center';
@@ -424,7 +460,6 @@
             canvasCtx.textAlign = 'right';
             canvasCtx.fillText("t (ms)", canvas.width - 10, canvas.height / 2 - 25);
             
-            // Ghi số liệu lên trục Y
             canvasCtx.textAlign = 'left';
             canvasCtx.textBaseline = 'middle';
             const maxY = 1.0 / zoomY; 
@@ -443,7 +478,6 @@
 
             if (isReset) return;
 
-            // Vẽ đồ thị âm thanh
             if (!isPaused || dataArray[0] !== 0) {
                 canvasCtx.save(); 
                 
