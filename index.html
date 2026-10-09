@@ -134,7 +134,7 @@
         let sampleRate = 48000; 
         let stopTimer; 
 
-        // Khởi tạo mặc định khoảng thời gian hiển thị chuẩn xác là 0.2s (200ms) cho mọi nguồn âm
+        // Khởi tạo mặc định khoảng thời gian hiển thị chuẩn xác là 0.2s (200ms)
         let totalTimeOnScreen = 0.2; 
         let currentZoomY = 2.0;
         
@@ -150,6 +150,7 @@
         let startDuration = 0.2;
         let startZoomY = 2.0;
 
+        // Xử lý vuốt màn hình cảm ứng
         canvas.addEventListener('touchstart', (e) => {
             if (e.touches.length === 2) {
                 e.preventDefault();
@@ -170,10 +171,10 @@
                 dx = Math.max(dx, 10);
                 dy = Math.max(dy, 10);
 
-                totalTimeOnScreen = startDuration * (dx / initialPinchDistX);
+                totalTimeOnScreen = startDuration * (initialPinchDistX / dx); // Vuốt ra giãn thời gian
                 currentZoomY = startZoomY * (dy / initialPinchDistY);
 
-                // Giới hạn thời gian hiển thị từ 0.1s đến 1.0s khi người dùng tự chủ động zoom
+                // Giới hạn thời gian hiển thị trục X từ 0.1s đến 1.0s
                 totalTimeOnScreen = Math.max(0.1, Math.min(totalTimeOnScreen, 1.0));
                 currentZoomY = Math.max(0.5, Math.min(currentZoomY, 10.0));
 
@@ -181,6 +182,7 @@
             }
         }, {passive: false});
 
+        // Xử lý cuộn chuột cho PC
         canvas.addEventListener('wheel', (e) => {
             e.preventDefault();
             if (e.shiftKey) {
@@ -195,6 +197,7 @@
             if (isPaused) drawFrame();
         }, {passive: false});
 
+        // Xử lý chế độ toàn màn hình
         fullscreenButton.addEventListener('click', () => {
             let elem = document.documentElement;
             let isFullscreen = document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement;
@@ -236,6 +239,7 @@
         document.addEventListener('webkitfullscreenchange', updateFullscreenButton);
         document.addEventListener('MSFullscreenChange', updateFullscreenButton);
 
+        // Tự động dừng sau 2 giây
         function triggerAutoStop() {
             clearTimeout(stopTimer);
             if (!isPaused) {
@@ -244,13 +248,14 @@
                         isPaused = true;
                         pauseButton.textContent = "2. Đo / Dừng";
                         pauseButton.style.backgroundColor = "#28a745"; 
-                        infoText.textContent = "Đã dừng (2s) - Hiển thị chuẩn 0.2s";
+                        infoText.textContent = "Đã dừng";
                         infoText.style.color = "#d93025";
                     }
                 }, 2000); 
             }
         }
 
+        // Khởi động Micro
         startButton.addEventListener('click', async () => {
             if (!audioCtx) {
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -269,7 +274,7 @@
                 lowpassFilter.type = 'lowpass';
 
                 analyser = audioCtx.createAnalyser();
-                analyser.fftSize = 32768; 
+                analyser.fftSize = 32768; // Buffer lớn chống đứt sóng
                 
                 source.connect(highpassFilter);
                 highpassFilter.connect(lowpassFilter);
@@ -297,7 +302,7 @@
                 isPaused = false;
                 pauseButton.textContent = "Đang đo...";
                 pauseButton.style.backgroundColor = "#dc3545"; 
-                infoText.textContent = "Đang ghi âm trong 2 giây (0.2s / khung hình)...";
+                infoText.textContent = "Đang ghi âm trong 2 giây...";
                 infoText.style.color = "#dc3545";
                 draw(); 
                 triggerAutoStop(); 
@@ -321,7 +326,7 @@
             totalTimeOnScreen = 0.2; 
             currentZoomY = 2.0; 
             
-            infoText.textContent = "Trạng thái: Đã sẵn sàng";
+            infoText.textContent = "Sẵn sàng (Bấm 'Đo / Dừng' để tiếp tục)";
             infoText.style.color = "#007bff";
             
             drawFrame(true); 
@@ -334,6 +339,7 @@
             link.click();
         });
 
+        // Hàm vẽ đồ thị
         function drawFrame(isReset = false) {
             if (!analyser) {
                 canvasCtx.fillStyle = '#e6f7ff'; 
@@ -350,6 +356,7 @@
 
             const zoomY = currentZoomY;
 
+            // Xóa nền
             canvasCtx.fillStyle = '#e6f7ff'; 
             canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -377,6 +384,7 @@
             canvasCtx.moveTo(canvas.width / 2, 0);  
             canvasCtx.lineTo(canvas.width / 2, canvas.height);
             
+            // Vẽ các vạch chia nhỏ
             const tickSize = 5; 
             for(let i = 0; i <= 10; i++) {
                 canvasCtx.moveTo(i * stepX, canvas.height / 2 - tickSize);
@@ -388,7 +396,7 @@
             }
             canvasCtx.stroke();
 
-            // Hiển thị con số trên trục X dựa trên totalTimeOnScreen hiện tại (mặc định 0.2s = 200ms)
+            // Hiển thị con số thời gian trên trục X (tính theo ms)
             canvasCtx.fillStyle = '#000000'; 
             canvasCtx.font = 'bold 13px Arial';
             canvasCtx.textAlign = 'center';
@@ -397,14 +405,14 @@
             for(let i = 0; i <= 10; i++) {
                 if (i !== 5) { 
                     let t_val = (i - 5) * timePerGrid;
-                    let t_str = (t_val * 1000).toFixed(1).replace('.', ','); 
+                    let t_str = (t_val * 1000).toFixed(1).replace('.', ','); // Hiển thị dưới dạng mili-giây
                     canvasCtx.fillText(t_str, i * stepX, canvas.height / 2 + 10);
                 }
             }
             canvasCtx.textAlign = 'right';
             canvasCtx.fillText("t (ms)", canvas.width - 10, canvas.height / 2 - 25);
             
-            // Ghi số liệu lên trục Y
+            // Ghi số liệu lên trục Y (Biên độ)
             canvasCtx.textAlign = 'left';
             canvasCtx.textBaseline = 'middle';
             const maxY = 1.0 / zoomY; 
@@ -440,6 +448,7 @@
                 let x = 0;
                 let hasMoved = false;
 
+                // Cắt từ giữa buffer để đảm bảo tín hiệu đồng đều
                 const centerBuffer = Math.floor(bufferLength / 2);
                 const halfSamples = Math.floor(samplesNeeded / 2);
                 const startIndex = Math.max(0, centerBuffer - halfSamples);
@@ -465,6 +474,7 @@
             }
         }
 
+        // Vòng lặp animation vẽ đồ thị liên tục khi đang đo
         function draw() {
             if (isPaused) return; 
             requestAnimationFrame(draw);
