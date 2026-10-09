@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dao động ký (Oscilloscope) - Sóng âm</title>
     <style>
-        /* Biến trang web thành một App thực thụ, khóa cuộn trang, không khoảng trắng */
         html, body {
             margin: 0;
             padding: 0;
@@ -31,28 +30,25 @@
             z-index: 10;
         }
 
-        /* Sử dụng CSS Grid để chia cột nút bấm khoa học */
         .btn-group {
             display: grid; 
-            grid-template-columns: repeat(5, 1fr); /* Mặc định máy tính: 5 cột */
+            grid-template-columns: repeat(5, 1fr); 
             gap: 8px; 
             width: 100%;
         }
 
-        /* Giao diện cho iPad / Tablet */
         @media (max-width: 800px) {
             .btn-group {
-                grid-template-columns: 1fr 1fr 1fr; /* 3 cột */
+                grid-template-columns: 1fr 1fr 1fr; 
             }
         }
 
-        /* Giao diện cho Điện thoại di động */
         @media (max-width: 500px) {
             .btn-group {
-                grid-template-columns: 1fr 1fr; /* 2 cột vuông vức */
+                grid-template-columns: 1fr 1fr; 
             }
             #fullscreenButton {
-                grid-column: span 2; /* Nút thứ 5 trải dài full 2 cột */
+                grid-column: span 2; 
             }
         }
 
@@ -80,7 +76,7 @@
             border-radius: 6px;
             box-shadow: 0 3px 5px rgba(0,0,0,0.2);
             transition: background-color 0.2s;
-            width: 100%; /* Đảm bảo nút lấp đầy ô Grid */
+            width: 100%; 
             box-sizing: border-box;
         }
         button:hover { background-color: #0056b3; }
@@ -98,14 +94,13 @@
             filter: brightness(0.9); 
         }
 
-        /* Đồ thị tự động co giãn lấp kín phần khoảng trống còn lại */
         canvas {
             flex-grow: 1;
             width: 100%;
             height: 0; 
             display: block;
             cursor: crosshair;
-            touch-action: none; /* Khóa vuốt mặc định của điện thoại để nhận Pinch-to-Zoom */
+            touch-action: none; 
         }
     </style>
 </head>
@@ -141,7 +136,7 @@
         let lastCorrelateTime = 0; 
         let stopTimer; 
 
-        // Biến lưu trữ mức độ Zoom cảm ứng
+        // Zoom mặc định hiển thị 5 chu kỳ
         let currentZoomX = 1.0;
         let currentZoomY = 2.0;
         
@@ -152,7 +147,6 @@
         }
         window.addEventListener('resize', resizeCanvas);
 
-        // --- CẢM ỨNG ĐA ĐIỂM VÀ CUỘN CHUỘT ---
         let initialPinchDistX = 0;
         let initialPinchDistY = 0;
         let startZoomX = 1.0;
@@ -181,8 +175,9 @@
                 currentZoomX = startZoomX * (initialPinchDistX / dx);
                 currentZoomY = startZoomY * (dy / initialPinchDistY);
 
-                currentZoomX = Math.max(0.1, Math.min(currentZoomX, 5.0));
-                currentZoomY = Math.max(0.5, Math.min(currentZoomY, 15.0));
+                // CHỐT: Tối thiểu 2 chu kỳ (Zoom 0.4), Tối đa 10 chu kỳ (Zoom 2.0)
+                currentZoomX = Math.max(0.4, Math.min(currentZoomX, 2.0));
+                currentZoomY = Math.max(0.5, Math.min(currentZoomY, 10.0)); // Biên độ Y vừa đủ
 
                 if (isPaused) drawFrame();
             }
@@ -193,16 +188,15 @@
             if (e.shiftKey) {
                 if (e.deltaY > 0) currentZoomX *= 1.1;
                 else currentZoomX /= 1.1;
-                currentZoomX = Math.max(0.1, Math.min(currentZoomX, 5.0));
+                currentZoomX = Math.max(0.4, Math.min(currentZoomX, 2.0));
             } else {
                 if (e.deltaY < 0) currentZoomY *= 1.1; 
                 else currentZoomY /= 1.1; 
-                currentZoomY = Math.max(0.5, Math.min(currentZoomY, 15.0));
+                currentZoomY = Math.max(0.5, Math.min(currentZoomY, 10.0));
             }
             if (isPaused) drawFrame();
         }, {passive: false});
 
-        // --- TOÀN MÀN HÌNH ---
         fullscreenButton.addEventListener('click', () => {
             let elem = document.documentElement;
             let isFullscreen = document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement;
@@ -244,7 +238,6 @@
         document.addEventListener('webkitfullscreenchange', updateFullscreenButton);
         document.addEventListener('MSFullscreenChange', updateFullscreenButton);
 
-        // --- XỬ LÝ ÂM THANH VÀ ĐỒ THỊ ---
         function autoCorrelate(buffer, sampleRate) {
             let SIZE = buffer.length;
             let sumSq = 0;
@@ -317,7 +310,8 @@
                 lowpassFilter.type = 'lowpass';
 
                 analyser = audioCtx.createAnalyser();
-                analyser.fftSize = 16384; 
+                // Bật bộ nhớ tối đa để chống đứt sóng khi Zoom 10 chu kỳ
+                analyser.fftSize = 32768; 
                 
                 source.connect(highpassFilter);
                 highpassFilter.connect(lowpassFilter);
@@ -389,7 +383,8 @@
                 return;
             }
             
-            const bufferLength = analyser.frequencyBinCount; 
+            // ÉP LẤY 100% BUFFER THAY VÌ 50% ĐỂ CHỐNG ĐỨT SÓNG
+            const bufferLength = analyser.fftSize; 
             const dataArray = new Uint8Array(bufferLength);
             
             if (!isPaused && !isReset) {
