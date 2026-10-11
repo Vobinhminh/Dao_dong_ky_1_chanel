@@ -20,7 +20,6 @@
             flex-direction: column;
         }
         
-        /* Bố cục thanh Header */
         .top-bar {
             display: flex;
             background-color: #f0f4f8;
@@ -28,7 +27,7 @@
             z-index: 10;
             padding: 8px;
             gap: 8px;
-            align-items: center; /* Căn giữa theo chiều dọc, không bị kéo dãn */
+            align-items: center; 
         }
 
         .controls-wrapper {
@@ -45,7 +44,6 @@
             width: 100%;
         }
 
-        /* Khung QR Code vuông vức, cân đối, cao đúng bằng 2 dòng bên trái */
         .qr-panel {
             display: flex;
             flex-direction: column;
@@ -57,7 +55,7 @@
             padding: 4px;
             box-sizing: border-box;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            height: 74px; /* Khớp chính xác chiều cao của hàng nút + hàng thông báo */
+            height: 74px; 
             width: 74px;
             flex-shrink: 0;
         }
@@ -80,7 +78,7 @@
         @media (max-width: 800px) {
             .top-bar { padding: 0; gap: 0; }
             .controls-wrapper { padding: 8px; }
-            .qr-panel { display: none; } /* Ẩn QR trên Tablet/Mobile */
+            .qr-panel { display: none; } 
             .btn-group { grid-template-columns: 1fr 1fr 1fr; }
         }
 
@@ -148,7 +146,6 @@
             <div class="info-panel" id="infoText">Đang chờ bật Micro...</div>
         </div>
         
-        <!-- Khung QR Code vuông vức bên phải, có chữ Scan me -->
         <div class="qr-panel" id="qrPanel">
             <img id="qrImage" src="" alt="QR Code">
             <span class="scan-title">Scan me</span>
@@ -158,7 +155,6 @@
     <canvas id="oscilloscope"></canvas>
 
     <script>
-        // --- TỰ ĐỘNG TẠO MÃ QR TỪ LINK GITHUB ---
         window.addEventListener('DOMContentLoaded', () => {
             const qrImage = document.getElementById('qrImage');
             if (qrImage) {
@@ -170,7 +166,6 @@
             }
         });
 
-        // --- LÕI ĐỒ THỊ SÓNG ÂM ---
         const startButton = document.getElementById('startButton');
         const pauseButton = document.getElementById('pauseButton');
         const resetButton = document.getElementById('resetButton');
@@ -206,11 +201,15 @@
         let initialPinchDistX = 0;
         let initialPinchDistY = 0;
         let startDuration = totalTimeOnScreen;
-        let startZoomY = 2.0;
+        let startZoomY = currentZoomY;
 
+        // Xử lý co giãn trục X, Y bằng cảm ứng đa điểm (Touch)
         canvas.addEventListener('touchstart', (e) => {
             if (e.touches.length === 2) {
                 e.preventDefault();
+                // KHÓA CHỨC NĂNG ZOOM: Chỉ cho phép zoom khi đồ thị đã dừng (isPaused = true)
+                if (!isPaused) return; 
+
                 let dx = Math.abs(e.touches[0].clientX - e.touches[1].clientX);
                 let dy = Math.abs(e.touches[0].clientY - e.touches[1].clientY);
                 initialPinchDistX = Math.max(dx, 10); 
@@ -223,6 +222,9 @@
         canvas.addEventListener('touchmove', (e) => {
             if (e.touches.length === 2) {
                 e.preventDefault();
+                // KHÓA CHỨC NĂNG ZOOM: Chỉ cho phép zoom khi đồ thị đã dừng (isPaused = true)
+                if (!isPaused) return;
+
                 let dx = Math.abs(e.touches[0].clientX - e.touches[1].clientX);
                 let dy = Math.abs(e.touches[0].clientY - e.touches[1].clientY);
                 dx = Math.max(dx, 10);
@@ -239,21 +241,32 @@
             }
         }, {passive: false});
 
+        // Xử lý co giãn đồng thời trục X, Y bằng con lăn chuột (Mouse Wheel)
         canvas.addEventListener('wheel', (e) => {
             e.preventDefault();
+            // KHÓA CHỨC NĂNG ZOOM: Chỉ cho phép zoom khi đồ thị đã dừng (isPaused = true)
+            if (!isPaused) return;
+
             isUserZoomed = true;
-            if (e.shiftKey) {
-                if (e.deltaY > 0) totalTimeOnScreen *= 1.1;
-                else totalTimeOnScreen /= 1.1;
-                totalTimeOnScreen = Math.max(0.01, Math.min(totalTimeOnScreen, 2.4));
-            } else {
-                if (e.deltaY < 0) currentZoomY *= 1.1; 
-                else currentZoomY /= 1.1; 
-                currentZoomY = Math.max(0.5, Math.min(currentZoomY, 10.0));
+            
+            if (e.deltaY > 0) { 
+                // Lăn chuột xuống -> Thu nhỏ toàn bộ đồ thị (Zoom out)
+                totalTimeOnScreen *= 1.1; // Thời gian giãn ra
+                currentZoomY /= 1.1;      // Biên độ co lại
+            } else { 
+                // Lăn chuột lên -> Phóng to toàn bộ đồ thị (Zoom in)
+                totalTimeOnScreen /= 1.1; // Thời gian thu lại
+                currentZoomY *= 1.1;      // Biên độ cao lên
             }
+            
+            // Giới hạn mức độ zoom để đồ thị không bị vỡ
+            totalTimeOnScreen = Math.max(0.01, Math.min(totalTimeOnScreen, 2.4));
+            currentZoomY = Math.max(0.5, Math.min(currentZoomY, 10.0));
+            
             if (isPaused) drawFrame();
         }, {passive: false});
 
+        // Nút bấm Toàn màn hình
         fullscreenButton.addEventListener('click', () => {
             let elem = document.documentElement;
             let isFullscreen = document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement;
@@ -278,6 +291,7 @@
         document.addEventListener('fullscreenchange', updateFullscreenButton);
         document.addEventListener('webkitfullscreenchange', updateFullscreenButton);
 
+        // Thuật toán nhận diện tần số tự động (Auto-correlation)
         function autoCorrelate(buffer, sampleRate) {
             let SIZE = buffer.length;
             let sumSq = 0;
@@ -308,6 +322,7 @@
             return freq;
         }
 
+        // Tự động dừng đo sau 2 giây
         function triggerAutoStop() {
             clearTimeout(stopTimer);
             if (!isPaused) {
@@ -323,6 +338,7 @@
             }
         }
 
+        // Kích hoạt Micro và các bộ lọc
         startButton.addEventListener('click', async () => {
             if (!audioCtx) {
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -431,6 +447,7 @@
             link.click();
         });
 
+        // Hệ thống vẽ Canvas
         function drawFrame(isReset = false) {
             if (!audioCtx) {
                 canvasCtx.fillStyle = '#e6f7ff'; 
@@ -459,6 +476,7 @@
             canvasCtx.fillStyle = '#e6f7ff'; 
             canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
 
+            // Vẽ lưới mờ
             canvasCtx.strokeStyle = '#b3e0ff'; 
             canvasCtx.lineWidth = 1;
             const stepX = canvas.width / 10;  
@@ -473,6 +491,7 @@
             }
             canvasCtx.stroke();
 
+            // Vẽ hệ trục tọa độ giao nhau tại tâm (0,0)
             canvasCtx.lineWidth = 2;
             canvasCtx.strokeStyle = '#000000'; 
             canvasCtx.beginPath();
@@ -492,6 +511,7 @@
             }
             canvasCtx.stroke();
 
+            // Ghi chú thời gian (trục X)
             canvasCtx.fillStyle = '#000000'; 
             canvasCtx.font = 'bold 13px Arial';
             canvasCtx.textAlign = 'center';
@@ -508,6 +528,7 @@
             canvasCtx.textAlign = 'right';
             canvasCtx.fillText("t (ms)", canvas.width - 10, canvas.height / 2 - 25);
             
+            // Ghi chú biên độ (trục Y)
             canvasCtx.textAlign = 'left';
             canvasCtx.textBaseline = 'middle';
             const maxY = 1.0 / zoomY; 
@@ -525,6 +546,7 @@
 
             if (isReset) return;
 
+            // Tiến hành vẽ đồ thị
             if (recordIndex > 0) {
                 canvasCtx.save(); 
                 canvasCtx.beginPath();
@@ -577,6 +599,7 @@
             }
         }
 
+        // Vòng lặp vẽ liên tục (Animation loop)
         function draw() {
             if (isPaused) return; 
             requestAnimationFrame(draw);
