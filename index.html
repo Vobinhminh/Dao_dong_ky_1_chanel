@@ -164,14 +164,16 @@
             
             <div id="settingsRow" style="display: none; gap: 6px; width: 100%;">
                 <select id="micSelect" class="custom-select" style="display: none; flex: 1;"></select>
-                <select id="speedSelect" class="custom-select" style="flex: 1;">
+                
+                <select id="modeSelect" class="custom-select" style="flex: 1;">
+                    <option value="auto" selected>Chế độ: Khảo sát tần số của nguồn âm</option>
+                    <option value="continuous">Chế độ: Khảo sát nguồn âm</option>
+                </select>
+
+                <select id="speedSelect" class="custom-select" style="display: none; flex: 1;">
                     <option value="3" selected>Tốc độ quét: Nhanh</option>
                     <option value="2">Tốc độ quét: Vừa</option>
                     <option value="1">Tốc độ quét: Chậm</option>
-                </select>
-                <select id="modeSelect" class="custom-select" style="flex: 1;">
-                    <option value="auto" selected>Chế độ: Đo tĩnh (Dừng sau 2s)</option>
-                    <option value="continuous">Chế độ: Thu liên tục vô hạn</option>
                 </select>
             </div>
             
@@ -192,7 +194,6 @@
             if (qrImage) {
                 let currentUrl = window.location.href;
                 if (currentUrl.startsWith('file://')) {
-                    // Dòng thay đổi URL GitHub của thầy ở đây:
                     currentUrl = 'https://github.com/TenCuaThay/DaoDongKy'; 
                 }
                 qrImage.src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(currentUrl)}`;
@@ -234,16 +235,22 @@
         let targetFPS = 60;
         let lastDrawTime = performance.now();
         
-        // --- THUẬT TOÁN ĐIỀU CHỈNH TỐC ĐỘ QUÉT (ĐÃ ĐƯỢC TINH CHỈNH) ---
         speedSelect.addEventListener('change', (e) => {
             let val = parseInt(e.target.value);
-            if (val === 1) targetFPS = 10;      // Chậm: 10 FPS (Quan sát rất rõ sự tắt dần)
-            else if (val === 2) targetFPS = 20; // Vừa: 20 FPS (Tối ưu để xem biến thiên tần số)
-            else targetFPS = 60;                // Nhanh: 60 FPS (Bình thường)
+            if (val === 1) targetFPS = 10;      
+            else if (val === 2) targetFPS = 20; 
+            else targetFPS = 60;                
         });
 
         modeSelect.addEventListener('change', (e) => {
             isContinuousMode = (e.target.value === 'continuous');
+            if (isContinuousMode) {
+                speedSelect.style.display = 'block';
+            } else {
+                speedSelect.style.display = 'none';
+                targetFPS = 60; 
+                speedSelect.value = "3"; 
+            }
         });
         
         function resizeCanvas() {
@@ -298,13 +305,10 @@
             if (!isPaused) return;
 
             isUserZoomed = true;
-            
             if (e.deltaY > 0) { 
-                totalTimeOnScreen *= 1.1; 
-                currentZoomY /= 1.1;      
+                totalTimeOnScreen *= 1.1; currentZoomY /= 1.1;      
             } else { 
-                totalTimeOnScreen /= 1.1; 
-                currentZoomY *= 1.1;      
+                totalTimeOnScreen /= 1.1; currentZoomY *= 1.1;      
             }
             
             totalTimeOnScreen = Math.max(0.002, Math.min(totalTimeOnScreen, 2.4));
@@ -499,7 +503,7 @@
                 pauseButton.textContent = "Đang đo...";
                 pauseButton.style.backgroundColor = "#dc3545"; 
                 
-                infoText.textContent = isContinuousMode ? "Đang thu liên tục vô hạn..." : "Đang ghi âm (Quét Live)...";
+                infoText.textContent = isContinuousMode ? "Khảo sát nguồn âm (Đang thu...)" : "Khảo sát tần số (Quét Live)...";
                 infoText.style.color = "#dc3545";
                 
                 lastDrawTime = performance.now(); 
@@ -575,15 +579,15 @@
 
             canvasCtx.strokeStyle = '#b3e0ff'; 
             canvasCtx.lineWidth = 1;
-            const stepX = canvas.width / 10;  
-            const stepY = canvas.height / 8;  
+            const stepGridX = canvas.width / 10;  
+            const stepGridY = canvas.height / 8;  
             
             canvasCtx.beginPath();
             for(let i = 0; i <= 10; i++) {
-                canvasCtx.moveTo(i * stepX, 0); canvasCtx.lineTo(i * stepX, canvas.height);
+                canvasCtx.moveTo(i * stepGridX, 0); canvasCtx.lineTo(i * stepGridX, canvas.height);
             }
             for(let i = 0; i <= 8; i++) {
-                canvasCtx.moveTo(0, i * stepY); canvasCtx.lineTo(canvas.width, i * stepY);
+                canvasCtx.moveTo(0, i * stepGridY); canvasCtx.lineTo(canvas.width, i * stepGridY);
             }
             canvasCtx.stroke();
 
@@ -597,12 +601,12 @@
             
             const tickSize = 5; 
             for(let i = 0; i <= 10; i++) {
-                canvasCtx.moveTo(i * stepX, canvas.height / 2 - tickSize);
-                canvasCtx.lineTo(i * stepX, canvas.height / 2 + tickSize);
+                canvasCtx.moveTo(i * stepGridX, canvas.height / 2 - tickSize);
+                canvasCtx.lineTo(i * stepGridX, canvas.height / 2 + tickSize);
             }
             for(let i = 0; i <= 8; i++) {
-                canvasCtx.moveTo(canvas.width / 2 - tickSize, i * stepY);
-                canvasCtx.lineTo(canvas.width / 2 + tickSize, i * stepY);
+                canvasCtx.moveTo(canvas.width / 2 - tickSize, i * stepGridY);
+                canvasCtx.lineTo(canvas.width / 2 + tickSize, i * stepGridY);
             }
             canvasCtx.stroke();
 
@@ -616,7 +620,7 @@
                     let t_val = (i - 5) * timePerGrid;
                     let ms = t_val * 1000;
                     let t_str = parseFloat(ms.toFixed(2)).toString().replace('.', ','); 
-                    canvasCtx.fillText(t_str, i * stepX, canvas.height / 2 + 10);
+                    canvasCtx.fillText(t_str, i * stepGridX, canvas.height / 2 + 10);
                 }
             }
             canvasCtx.textAlign = 'right';
@@ -630,7 +634,7 @@
                 if (i !== 4 && i !== 0) { 
                     let val = maxY - (i * valPerStep);
                     let val_str = parseFloat(val.toFixed(2)).toString().replace('.', ',');
-                    canvasCtx.fillText(val_str, canvas.width / 2 + 10, i * stepY);
+                    canvasCtx.fillText(val_str, canvas.width / 2 + 10, i * stepGridY);
                 }
             }
             canvasCtx.fillText("0", canvas.width / 2 + 8, canvas.height / 2 + 15); 
@@ -650,23 +654,53 @@
                 canvasCtx.beginPath();
 
                 const samplesNeeded = Math.floor(totalTimeOnScreen * sampleRate);
-                const sliceWidth = canvas.width / samplesNeeded;
+                
+                // THUẬT TOÁN KHỬ LAG ĐỒ HỌA (Decimation Peak-Preserving)
+                // Giảm tải cho GPU bằng cách gộp mẫu dựa trên chiều rộng pixel màn hình
+                const step = Math.max(1, Math.floor(samplesNeeded / (canvas.width * 2))); 
+                const sliceWidth = (canvas.width / samplesNeeded) * step;
+                
                 let x = 0;
                 let hasMoved = false;
 
                 const startIndex = recordIndex - samplesNeeded;
                 const endIndex = startIndex + samplesNeeded;
 
-                for (let i = startIndex; i < endIndex; i++) {
-                    let v = 0;
-                    if (i >= 0 && i < recordIndex) {
-                        v = recordedData[i % recordedData.length]; 
+                for (let i = startIndex; i < endIndex; i += step) {
+                    if (i < 0 || i >= recordIndex) {
+                        x += sliceWidth;
+                        continue;
                     }
-                    let y = (v * -1.0) * zoomY * (canvas.height / 2) + (canvas.height / 2);
-                    
-                    if (!hasMoved) { canvasCtx.moveTo(x, y); hasMoved = true; } 
-                    else { canvasCtx.lineTo(x, y); }
-                    x += sliceWidth;
+
+                    let v = recordedData[i % recordedData.length];
+
+                    // Kỹ thuật giữ lại biên độ thật (Max/Min) khi nội suy nhảy bước
+                    if (step > 2) {
+                        let maxV = v;
+                        let minV = v;
+                        for(let j = 1; j < step; j++) {
+                            if (i + j < recordIndex) {
+                                let tempV = recordedData[(i + j) % recordedData.length];
+                                if (tempV > maxV) maxV = tempV;
+                                if (tempV < minV) minV = tempV;
+                            }
+                        }
+                        
+                        let yMin = (minV * -1.0) * zoomY * (canvas.height / 2) + (canvas.height / 2);
+                        if (!hasMoved) { canvasCtx.moveTo(x, yMin); hasMoved = true; } 
+                        else { canvasCtx.lineTo(x, yMin); }
+                        
+                        let yMax = (maxV * -1.0) * zoomY * (canvas.height / 2) + (canvas.height / 2);
+                        canvasCtx.lineTo(x, yMax);
+                        
+                        x += sliceWidth;
+                    } else {
+                        let y = (v * -1.0) * zoomY * (canvas.height / 2) + (canvas.height / 2);
+                        if (!hasMoved) { canvasCtx.moveTo(x, y); hasMoved = true; } 
+                        else { canvasCtx.lineTo(x, y); }
+                        x += sliceWidth;
+                    }
+
                     if (x > canvas.width) break; 
                 }
                 
