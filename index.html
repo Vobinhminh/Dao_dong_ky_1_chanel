@@ -44,6 +44,22 @@
             width: 100%;
         }
 
+        /* Danh sách chọn Micro */
+        .mic-select {
+            padding: 6px;
+            font-size: 13px;
+            font-weight: bold;
+            color: #0056b3;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+            background-color: #fff;
+            width: 100%;
+            cursor: pointer;
+            outline: none;
+            box-sizing: border-box;
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
+        }
+
         .qr-panel {
             display: flex;
             flex-direction: column;
@@ -72,7 +88,7 @@
             color: #d93025;
             margin-top: 3px;
             line-height: 1;
-            white-space: nowrap; /* Giữ chữ trên 1 dòng */
+            white-space: nowrap; 
         }
 
         @media (max-width: 800px) {
@@ -143,6 +159,9 @@
                 <button id="fullscreenButton">5. Toàn màn hình</button>
             </div>
             
+            <!-- Thanh chọn thiết bị Micro (Mặc định ẩn) -->
+            <select id="micSelect" class="mic-select" style="display: none;"></select>
+            
             <div class="info-panel" id="infoText">Đang chờ bật Micro...</div>
         </div>
         
@@ -172,11 +191,15 @@
         const saveButton = document.getElementById('saveButton');
         const fullscreenButton = document.getElementById('fullscreenButton');
         const infoText = document.getElementById('infoText');
+        const micSelect = document.getElementById('micSelect');
         const canvas = document.getElementById('oscilloscope');
         const canvasCtx = canvas.getContext('2d');
         
         let audioCtx, processor, dummyGain;
         let highpassFilter, lowpassFilter;
+        let currentStream = null;
+        let audioSource = null;
+        
         let isPaused = true; 
         let sampleRate = 48000; 
         let stopTimer; 
@@ -207,7 +230,6 @@
         canvas.addEventListener('touchstart', (e) => {
             if (e.touches.length === 2) {
                 e.preventDefault();
-                // KHÓA CHỨC NĂNG ZOOM: Chỉ cho phép zoom khi đồ thị đã dừng (isPaused = true)
                 if (!isPaused) return; 
 
                 let dx = Math.abs(e.touches[0].clientX - e.touches[1].clientX);
@@ -222,7 +244,6 @@
         canvas.addEventListener('touchmove', (e) => {
             if (e.touches.length === 2) {
                 e.preventDefault();
-                // KHÓA CHỨC NĂNG ZOOM: Chỉ cho phép zoom khi đồ thị đã dừng (isPaused = true)
                 if (!isPaused) return;
 
                 let dx = Math.abs(e.touches[0].clientX - e.touches[1].clientX);
@@ -244,22 +265,18 @@
         // Xử lý co giãn đồng thời trục X, Y bằng con lăn chuột (Mouse Wheel)
         canvas.addEventListener('wheel', (e) => {
             e.preventDefault();
-            // KHÓA CHỨC NĂNG ZOOM: Chỉ cho phép zoom khi đồ thị đã dừng (isPaused = true)
             if (!isPaused) return;
 
             isUserZoomed = true;
             
             if (e.deltaY > 0) { 
-                // Lăn chuột xuống -> Thu nhỏ toàn bộ đồ thị (Zoom out)
-                totalTimeOnScreen *= 1.1; // Thời gian giãn ra
-                currentZoomY /= 1.1;      // Biên độ co lại
+                totalTimeOnScreen *= 1.1; 
+                currentZoomY /= 1.1;      
             } else { 
-                // Lăn chuột lên -> Phóng to toàn bộ đồ thị (Zoom in)
-                totalTimeOnScreen /= 1.1; // Thời gian thu lại
-                currentZoomY *= 1.1;      // Biên độ cao lên
+                totalTimeOnScreen /= 1.1; 
+                currentZoomY *= 1.1;      
             }
             
-            // Giới hạn mức độ zoom để đồ thị không bị vỡ
             totalTimeOnScreen = Math.max(0.01, Math.min(totalTimeOnScreen, 2.4));
             currentZoomY = Math.max(0.5, Math.min(currentZoomY, 10.0));
             
@@ -291,7 +308,6 @@
         document.addEventListener('fullscreenchange', updateFullscreenButton);
         document.addEventListener('webkitfullscreenchange', updateFullscreenButton);
 
-        // Thuật toán nhận diện tần số tự động (Auto-correlation)
         function autoCorrelate(buffer, sampleRate) {
             let SIZE = buffer.length;
             let sumSq = 0;
@@ -322,7 +338,6 @@
             return freq;
         }
 
-        // Tự động dừng đo sau 2 giây
         function triggerAutoStop() {
             clearTimeout(stopTimer);
             if (!isPaused) {
@@ -338,16 +353,13 @@
             }
         }
 
-        // Kích hoạt Micro và các bộ lọc
-        startButton.addEventListener('click', async () => {
+        // --- HÀM KHỞI TẠO VÀ KẾT NỐI MICRO (CÓ THỂ CHỌN THIẾT BỊ) ---
+        async function initAudio(deviceId = null) {
+            // Khởi tạo các Node âm thanh 1 lần duy nhất để tránh tràn bộ nhớ
             if (!audioCtx) {
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 sampleRate = audioCtx.sampleRate; 
                 recordedData = new Float32Array(sampleRate * 3); 
-            }
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                const source = audioCtx.createMediaStreamSource(stream);
                 
                 highpassFilter = audioCtx.createBiquadFilter();
                 highpassFilter.frequency.value = 80;
@@ -369,18 +381,37 @@
                     }
                 };
 
-                source.connect(highpassFilter);
-                highpassFilter.connect(lowpassFilter);
-                lowpassFilter.connect(processor);
-
                 dummyGain = audioCtx.createGain();
                 dummyGain.gain.value = 0;
+                
+                // Kết nối chuỗi bộ lọc ngầm
+                highpassFilter.connect(lowpassFilter);
+                lowpassFilter.connect(processor);
                 processor.connect(dummyGain);
                 dummyGain.connect(audioCtx.destination);
+            }
+
+            try {
+                // Ngắt Micro cũ nếu người dùng đang chuyển sang Micro khác
+                if (currentStream) {
+                    currentStream.getTracks().forEach(track => track.stop());
+                }
+                if (audioSource) {
+                    audioSource.disconnect();
+                }
+
+                const constraints = {
+                    audio: deviceId ? { deviceId: { exact: deviceId } } : true
+                };
+                
+                // Thu luồng âm thanh từ Micro mới
+                currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+                audioSource = audioCtx.createMediaStreamSource(currentStream);
+                audioSource.connect(highpassFilter);
 
                 isPaused = true;
                 resizeCanvas();
-                drawFrame(); 
+                drawFrame(true); 
                 
                 startButton.textContent = "Đã kết nối";
                 startButton.disabled = true;
@@ -390,10 +421,50 @@
                 
                 infoText.textContent = "Trạng thái: Đã sẵn sàng";
                 infoText.style.color = "#007bff";
+
+                // Quét và liệt kê danh sách Micro vào Dropdown (Chỉ chạy 1 lần đầu)
+                if (!deviceId) {
+                    const devices = await navigator.mediaDevices.enumerateDevices();
+                    const audioInputs = devices.filter(device => device.kind === 'audioinput');
+                    
+                    micSelect.innerHTML = ''; 
+                    audioInputs.forEach((device, index) => {
+                        const option = document.createElement('option');
+                        option.value = device.deviceId;
+                        // Lấy tên thiết bị thực tế, nếu không có sẽ tự đặt "Microphone 1", "Microphone 2"...
+                        option.text = device.label || `Microphone ${index + 1}`;
+                        micSelect.appendChild(option);
+                    });
+                    
+                    // Nếu cắm nhiều hơn 1 Micro, hiển thị thanh chọn lên
+                    if (audioInputs.length > 1) {
+                        micSelect.style.display = 'block';
+                    }
+                }
             } catch (err) {
                 alert("Không thể truy cập micro. Lỗi: " + err);
             }
+        }
+
+        // Bật Micro lần đầu
+        startButton.addEventListener('click', () => initAudio());
+
+        // Xử lý sự kiện khi người dùng đổi Micro trong danh sách
+        micSelect.addEventListener('change', (e) => {
+            initAudio(e.target.value); // Khởi động lại với ID Micro mới
+            
+            // Xóa sạch dữ liệu cũ và chuẩn bị cho Micro mới
+            isPaused = true;
+            clearTimeout(stopTimer); 
+            pauseButton.textContent = "2. Đo / Dừng";
+            pauseButton.style.backgroundColor = "#28a745"; 
+            infoText.textContent = `Đã chuyển sang: ${e.target.options[e.target.selectedIndex].text}`;
+            recordIndex = 0;
+            recordedData.fill(0);
+            drawFrame(true);
         });
+
+        // -------------------------------------------------------------
 
         pauseButton.addEventListener('click', () => {
             if (isPaused) {
