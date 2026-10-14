@@ -67,12 +67,12 @@
         }
 
         .qr-panel .scan-title {
-            font-size: 9px;
+            font-size: 8.5px;
             font-weight: bold;
             color: #d93025;
-            margin-top: 2px;
+            margin-top: 3px;
             line-height: 1;
-            letter-spacing: 0.5px;
+            white-space: nowrap; /* Giữ chữ trên 1 dòng */
         }
 
         @media (max-width: 800px) {
@@ -148,7 +148,7 @@
         
         <div class="qr-panel" id="qrPanel">
             <img id="qrImage" src="" alt="QR Code">
-            <span class="scan-title">Scan me</span>
+            <span class="scan-title">Dao động ký</span>
         </div>
     </div>
 
