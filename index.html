@@ -27,7 +27,8 @@
             z-index: 10;
             padding: 8px;
             gap: 8px;
-            align-items: center; 
+            /* Thay đổi từ center sang stretch để cột QR tự động cao bằng cột chứa nút */
+            align-items: stretch; 
         }
 
         .controls-wrapper {
@@ -44,8 +45,7 @@
             width: 100%;
         }
 
-        /* Danh sách chọn Micro */
-        .mic-select {
+        .custom-select {
             padding: 6px;
             font-size: 13px;
             font-weight: bold;
@@ -60,6 +60,7 @@
             box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
         }
 
+        /* Khung QR Code tự động giãn theo chiều cao 3 dòng bên trái */
         .qr-panel {
             display: flex;
             flex-direction: column;
@@ -68,25 +69,24 @@
             background: #fff;
             border: 1px solid #ccc;
             border-radius: 6px;
-            padding: 4px;
+            padding: 6px;
             box-sizing: border-box;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            height: 74px; 
-            width: 74px;
+            width: 94px; /* Tăng chiều rộng để vừa vặn với chiều cao mới */
             flex-shrink: 0;
         }
 
         .qr-panel img {
-            width: 50px;
-            height: 50px;
+            width: 65px; /* Phóng to ảnh QR lên cho đẹp */
+            height: 65px;
             border: 1px solid #eee;
         }
 
         .qr-panel .scan-title {
-            font-size: 8.5px;
+            font-size: 9px;
             font-weight: bold;
             color: #d93025;
-            margin-top: 3px;
+            margin-top: 4px;
             line-height: 1;
             white-space: nowrap; 
         }
@@ -101,6 +101,7 @@
         @media (max-width: 500px) {
             .btn-group { grid-template-columns: 1fr 1fr; }
             #fullscreenButton { grid-column: span 2; }
+            #settingsRow { flex-direction: column; } 
         }
 
         .info-panel {
@@ -114,6 +115,10 @@
             width: 100%;
             text-align: center;
             box-sizing: border-box;
+            flex-grow: 1; /* Để dòng thông báo tự lấp đầy khoảng trống thừa nếu có */
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         button {
@@ -159,8 +164,14 @@
                 <button id="fullscreenButton">5. Toàn màn hình</button>
             </div>
             
-            <!-- Thanh chọn thiết bị Micro (Mặc định ẩn) -->
-            <select id="micSelect" class="mic-select" style="display: none;"></select>
+            <div id="settingsRow" style="display: none; gap: 6px; width: 100%;">
+                <select id="micSelect" class="custom-select" style="display: none; flex: 1;"></select>
+                <select id="speedSelect" class="custom-select" style="flex: 1;">
+                    <option value="3" selected>Tốc độ quét: Nhanh</option>
+                    <option value="2">Tốc độ quét: Vừa</option>
+                    <option value="1">Tốc độ quét: Chậm</option>
+                </select>
+            </div>
             
             <div class="info-panel" id="infoText">Đang chờ bật Micro...</div>
         </div>
@@ -192,6 +203,7 @@
         const fullscreenButton = document.getElementById('fullscreenButton');
         const infoText = document.getElementById('infoText');
         const micSelect = document.getElementById('micSelect');
+        const speedSelect = document.getElementById('speedSelect');
         const canvas = document.getElementById('oscilloscope');
         const canvasCtx = canvas.getContext('2d');
         
@@ -213,6 +225,16 @@
 
         let totalTimeOnScreen = 5 * (1.0 / 440); 
         let currentZoomY = 2.0;
+
+        let targetFPS = 60;
+        let lastDrawTime = performance.now();
+        
+        speedSelect.addEventListener('change', (e) => {
+            let val = parseInt(e.target.value);
+            if (val === 1) targetFPS = 15;      
+            else if (val === 2) targetFPS = 30; 
+            else targetFPS = 60;                
+        });
         
         function resizeCanvas() {
             canvas.width = canvas.clientWidth;
@@ -226,7 +248,6 @@
         let startDuration = totalTimeOnScreen;
         let startZoomY = currentZoomY;
 
-        // Xử lý co giãn trục X, Y bằng cảm ứng đa điểm (Touch)
         canvas.addEventListener('touchstart', (e) => {
             if (e.touches.length === 2) {
                 e.preventDefault();
@@ -262,7 +283,6 @@
             }
         }, {passive: false});
 
-        // Xử lý co giãn đồng thời trục X, Y bằng con lăn chuột (Mouse Wheel)
         canvas.addEventListener('wheel', (e) => {
             e.preventDefault();
             if (!isPaused) return;
@@ -283,7 +303,6 @@
             if (isPaused) drawFrame();
         }, {passive: false});
 
-        // Nút bấm Toàn màn hình
         fullscreenButton.addEventListener('click', () => {
             let elem = document.documentElement;
             let isFullscreen = document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement;
@@ -346,16 +365,15 @@
                         isPaused = true;
                         pauseButton.textContent = "2. Đo / Dừng";
                         pauseButton.style.backgroundColor = "#28a745"; 
-                        infoText.textContent = "Đã dừng - Đồ thị tự động dàn 5 Chu kỳ";
+                        // THAY ĐỔI THEO YÊU CẦU:
+                        infoText.textContent = "Đã đo xong - Ấn nút 'Đo / Dừng' để tiếp tục";
                         infoText.style.color = "#d93025";
                     }
                 }, 2000); 
             }
         }
 
-        // --- HÀM KHỞI TẠO VÀ KẾT NỐI MICRO (CÓ THỂ CHỌN THIẾT BỊ) ---
         async function initAudio(deviceId = null) {
-            // Khởi tạo các Node âm thanh 1 lần duy nhất để tránh tràn bộ nhớ
             if (!audioCtx) {
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 sampleRate = audioCtx.sampleRate; 
@@ -384,7 +402,6 @@
                 dummyGain = audioCtx.createGain();
                 dummyGain.gain.value = 0;
                 
-                // Kết nối chuỗi bộ lọc ngầm
                 highpassFilter.connect(lowpassFilter);
                 lowpassFilter.connect(processor);
                 processor.connect(dummyGain);
@@ -392,7 +409,6 @@
             }
 
             try {
-                // Ngắt Micro cũ nếu người dùng đang chuyển sang Micro khác
                 if (currentStream) {
                     currentStream.getTracks().forEach(track => track.stop());
                 }
@@ -404,7 +420,6 @@
                     audio: deviceId ? { deviceId: { exact: deviceId } } : true
                 };
                 
-                // Thu luồng âm thanh từ Micro mới
                 currentStream = await navigator.mediaDevices.getUserMedia(constraints);
                 audioSource = audioCtx.createMediaStreamSource(currentStream);
                 audioSource.connect(highpassFilter);
@@ -422,7 +437,6 @@
                 infoText.textContent = "Trạng thái: Đã sẵn sàng";
                 infoText.style.color = "#007bff";
 
-                // Quét và liệt kê danh sách Micro vào Dropdown (Chỉ chạy 1 lần đầu)
                 if (!deviceId) {
                     const devices = await navigator.mediaDevices.enumerateDevices();
                     const audioInputs = devices.filter(device => device.kind === 'audioinput');
@@ -431,14 +445,15 @@
                     audioInputs.forEach((device, index) => {
                         const option = document.createElement('option');
                         option.value = device.deviceId;
-                        // Lấy tên thiết bị thực tế, nếu không có sẽ tự đặt "Microphone 1", "Microphone 2"...
                         option.text = device.label || `Microphone ${index + 1}`;
                         micSelect.appendChild(option);
                     });
                     
-                    // Nếu cắm nhiều hơn 1 Micro, hiển thị thanh chọn lên
+                    document.getElementById('settingsRow').style.display = 'flex';
                     if (audioInputs.length > 1) {
                         micSelect.style.display = 'block';
+                    } else {
+                        micSelect.style.display = 'none';
                     }
                 }
             } catch (err) {
@@ -446,14 +461,10 @@
             }
         }
 
-        // Bật Micro lần đầu
         startButton.addEventListener('click', () => initAudio());
 
-        // Xử lý sự kiện khi người dùng đổi Micro trong danh sách
         micSelect.addEventListener('change', (e) => {
-            initAudio(e.target.value); // Khởi động lại với ID Micro mới
-            
-            // Xóa sạch dữ liệu cũ và chuẩn bị cho Micro mới
+            initAudio(e.target.value); 
             isPaused = true;
             clearTimeout(stopTimer); 
             pauseButton.textContent = "2. Đo / Dừng";
@@ -463,8 +474,6 @@
             recordedData.fill(0);
             drawFrame(true);
         });
-
-        // -------------------------------------------------------------
 
         pauseButton.addEventListener('click', () => {
             if (isPaused) {
@@ -477,8 +486,10 @@
 
                 pauseButton.textContent = "Đang đo...";
                 pauseButton.style.backgroundColor = "#dc3545"; 
-                infoText.textContent = "Đang ghi âm (Quét Live & Tính toán 5 Chu kỳ)...";
+                infoText.textContent = "Đang ghi âm (Quét Live)...";
                 infoText.style.color = "#dc3545";
+                
+                lastDrawTime = performance.now(); 
                 draw(); 
                 triggerAutoStop(); 
             } else {
@@ -486,7 +497,8 @@
                 clearTimeout(stopTimer); 
                 pauseButton.textContent = "2. Đo / Dừng";
                 pauseButton.style.backgroundColor = "#28a745"; 
-                infoText.textContent = "Đã dừng - Đồ thị tự động dàn 5 Chu kỳ";
+                // THAY ĐỔI THEO YÊU CẦU:
+                infoText.textContent = "Đã đo xong - Ấn nút 'Đo / Dừng' để tiếp tục";
                 infoText.style.color = "#d93025";
             }
         });
@@ -518,7 +530,6 @@
             link.click();
         });
 
-        // Hệ thống vẽ Canvas
         function drawFrame(isReset = false) {
             if (!audioCtx) {
                 canvasCtx.fillStyle = '#e6f7ff'; 
@@ -547,7 +558,6 @@
             canvasCtx.fillStyle = '#e6f7ff'; 
             canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Vẽ lưới mờ
             canvasCtx.strokeStyle = '#b3e0ff'; 
             canvasCtx.lineWidth = 1;
             const stepX = canvas.width / 10;  
@@ -562,7 +572,6 @@
             }
             canvasCtx.stroke();
 
-            // Vẽ hệ trục tọa độ giao nhau tại tâm (0,0)
             canvasCtx.lineWidth = 2;
             canvasCtx.strokeStyle = '#000000'; 
             canvasCtx.beginPath();
@@ -582,7 +591,6 @@
             }
             canvasCtx.stroke();
 
-            // Ghi chú thời gian (trục X)
             canvasCtx.fillStyle = '#000000'; 
             canvasCtx.font = 'bold 13px Arial';
             canvasCtx.textAlign = 'center';
@@ -599,7 +607,6 @@
             canvasCtx.textAlign = 'right';
             canvasCtx.fillText("t (ms)", canvas.width - 10, canvas.height / 2 - 25);
             
-            // Ghi chú biên độ (trục Y)
             canvasCtx.textAlign = 'left';
             canvasCtx.textBaseline = 'middle';
             const maxY = 1.0 / zoomY; 
@@ -617,7 +624,6 @@
 
             if (isReset) return;
 
-            // Tiến hành vẽ đồ thị
             if (recordIndex > 0) {
                 canvasCtx.save(); 
                 canvasCtx.beginPath();
@@ -670,11 +676,18 @@
             }
         }
 
-        // Vòng lặp vẽ liên tục (Animation loop)
-        function draw() {
+        function draw(timestamp) {
             if (isPaused) return; 
             requestAnimationFrame(draw);
-            drawFrame();
+
+            if (!timestamp) timestamp = performance.now();
+            let elapsed = timestamp - lastDrawTime;
+            let interval = 1000 / targetFPS; 
+
+            if (elapsed > interval) {
+                lastDrawTime = timestamp - (elapsed % interval);
+                drawFrame();
+            }
         }
     </script>
 </body>
