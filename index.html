@@ -27,7 +27,6 @@
             z-index: 10;
             padding: 8px;
             gap: 8px;
-            /* Thay đổi từ center sang stretch để cột QR tự động cao bằng cột chứa nút */
             align-items: stretch; 
         }
 
@@ -60,7 +59,6 @@
             box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
         }
 
-        /* Khung QR Code tự động giãn theo chiều cao 3 dòng bên trái */
         .qr-panel {
             display: flex;
             flex-direction: column;
@@ -72,12 +70,12 @@
             padding: 6px;
             box-sizing: border-box;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            width: 94px; /* Tăng chiều rộng để vừa vặn với chiều cao mới */
+            width: 94px; 
             flex-shrink: 0;
         }
 
         .qr-panel img {
-            width: 65px; /* Phóng to ảnh QR lên cho đẹp */
+            width: 65px; 
             height: 65px;
             border: 1px solid #eee;
         }
@@ -115,7 +113,7 @@
             width: 100%;
             text-align: center;
             box-sizing: border-box;
-            flex-grow: 1; /* Để dòng thông báo tự lấp đầy khoảng trống thừa nếu có */
+            flex-grow: 1;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -171,6 +169,10 @@
                     <option value="2">Tốc độ quét: Vừa</option>
                     <option value="1">Tốc độ quét: Chậm</option>
                 </select>
+                <select id="modeSelect" class="custom-select" style="flex: 1;">
+                    <option value="auto" selected>Chế độ: Đo tĩnh (Dừng sau 2s)</option>
+                    <option value="continuous">Chế độ: Thu liên tục vô hạn</option>
+                </select>
             </div>
             
             <div class="info-panel" id="infoText">Đang chờ bật Micro...</div>
@@ -204,6 +206,7 @@
         const infoText = document.getElementById('infoText');
         const micSelect = document.getElementById('micSelect');
         const speedSelect = document.getElementById('speedSelect');
+        const modeSelect = document.getElementById('modeSelect');
         const canvas = document.getElementById('oscilloscope');
         const canvasCtx = canvas.getContext('2d');
         
@@ -213,6 +216,7 @@
         let audioSource = null;
         
         let isPaused = true; 
+        let isContinuousMode = false; 
         let sampleRate = 48000; 
         let stopTimer; 
 
@@ -235,11 +239,16 @@
             else if (val === 2) targetFPS = 30; 
             else targetFPS = 60;                
         });
+
+        modeSelect.addEventListener('change', (e) => {
+            isContinuousMode = (e.target.value === 'continuous');
+        });
         
+        // FIX 1: Sửa lỗi mất đồ thị khi xoay màn hình (bỏ cờ 'true')
         function resizeCanvas() {
             canvas.width = canvas.clientWidth;
             canvas.height = canvas.clientHeight;
-            drawFrame(true); 
+            drawFrame(); // Gọi vẽ lại dữ liệu cũ, không clear
         }
         window.addEventListener('resize', resizeCanvas);
 
@@ -276,7 +285,8 @@
                 totalTimeOnScreen = startDuration * (initialPinchDistX / dx); 
                 currentZoomY = startZoomY * (dy / initialPinchDistY);
 
-                totalTimeOnScreen = Math.max(0.01, Math.min(totalTimeOnScreen, 2.4));
+                // FIX 2: Hạ chặn thời gian xuống 0.002s để hiển thị chuẩn âm siêu bổng
+                totalTimeOnScreen = Math.max(0.002, Math.min(totalTimeOnScreen, 2.4));
                 currentZoomY = Math.max(0.5, Math.min(currentZoomY, 10.0));
 
                 if (isPaused) drawFrame();
@@ -297,7 +307,8 @@
                 currentZoomY *= 1.1;      
             }
             
-            totalTimeOnScreen = Math.max(0.01, Math.min(totalTimeOnScreen, 2.4));
+            // FIX 2: Tương tự như trên
+            totalTimeOnScreen = Math.max(0.002, Math.min(totalTimeOnScreen, 2.4));
             currentZoomY = Math.max(0.5, Math.min(currentZoomY, 10.0));
             
             if (isPaused) drawFrame();
@@ -359,13 +370,12 @@
 
         function triggerAutoStop() {
             clearTimeout(stopTimer);
-            if (!isPaused) {
+            if (!isPaused && !isContinuousMode) {
                 stopTimer = setTimeout(() => {
                     if (!isPaused) {
                         isPaused = true;
                         pauseButton.textContent = "2. Đo / Dừng";
                         pauseButton.style.backgroundColor = "#28a745"; 
-                        // THAY ĐỔI THEO YÊU CẦU:
                         infoText.textContent = "Đã đo xong - Ấn nút 'Đo / Dừng' để tiếp tục";
                         infoText.style.color = "#d93025";
                     }
@@ -392,9 +402,8 @@
                     if (!isPaused) {
                         let input = e.inputBuffer.getChannelData(0);
                         for (let i = 0; i < input.length; i++) {
-                            if (recordIndex < recordedData.length) {
-                                recordedData[recordIndex++] = input[i];
-                            }
+                            recordedData[recordIndex % recordedData.length] = input[i];
+                            recordIndex++;
                         }
                     }
                 };
@@ -476,6 +485,11 @@
         });
 
         pauseButton.addEventListener('click', () => {
+            // FIX 3: Đánh thức AudioContext nếu trình duyệt đưa vào chế độ ngủ (Suspend)
+            if (audioCtx && audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+
             if (isPaused) {
                 isPaused = false;
                 recordIndex = 0; 
@@ -486,7 +500,8 @@
 
                 pauseButton.textContent = "Đang đo...";
                 pauseButton.style.backgroundColor = "#dc3545"; 
-                infoText.textContent = "Đang ghi âm (Quét Live)...";
+                
+                infoText.textContent = isContinuousMode ? "Đang thu liên tục vô hạn..." : "Đang ghi âm (Quét Live)...";
                 infoText.style.color = "#dc3545";
                 
                 lastDrawTime = performance.now(); 
@@ -497,8 +512,7 @@
                 clearTimeout(stopTimer); 
                 pauseButton.textContent = "2. Đo / Dừng";
                 pauseButton.style.backgroundColor = "#28a745"; 
-                // THAY ĐỔI THEO YÊU CẦU:
-                infoText.textContent = "Đã đo xong - Ấn nút 'Đo / Dừng' để tiếp tục";
+                infoText.textContent = isContinuousMode ? "Đã tạm dừng đồ thị" : "Đã đo xong - Ấn nút 'Đo / Dừng' để tiếp tục";
                 infoText.style.color = "#d93025";
             }
         });
@@ -540,7 +554,10 @@
             if (!isPaused && recordIndex > 2048) {
                 let now = Date.now();
                 if (now - lastCorrelateTime > 300) {
-                    let recentData = recordedData.subarray(recordIndex - 2048, recordIndex);
+                    let recentData = new Float32Array(2048);
+                    for(let i=0; i<2048; i++) {
+                        recentData[i] = recordedData[(recordIndex - 2048 + i) % recordedData.length];
+                    }
                     let freq = autoCorrelate(recentData, sampleRate);
                     if (freq > 0) detectedFrequency = freq;
                     lastCorrelateTime = now;
@@ -550,7 +567,8 @@
             if (!isUserZoomed) {
                 let freqForCalc = (detectedFrequency > 0) ? detectedFrequency : 440;
                 totalTimeOnScreen = 5 * (1.0 / freqForCalc);
-                totalTimeOnScreen = Math.max(0.01, Math.min(totalTimeOnScreen, 2.4));
+                // FIX 2: Tương tự như trên
+                totalTimeOnScreen = Math.max(0.002, Math.min(totalTimeOnScreen, 2.4));
             }
 
             const zoomY = currentZoomY;
@@ -639,36 +657,20 @@
                 let x = 0;
                 let hasMoved = false;
 
-                if (!isPaused) {
-                    const startIndex = recordIndex - samplesNeeded;
-                    const endIndex = startIndex + samplesNeeded;
+                const startIndex = recordIndex - samplesNeeded;
+                const endIndex = startIndex + samplesNeeded;
 
-                    for (let i = startIndex; i < endIndex; i++) {
-                        let v = 0;
-                        if (i >= 0 && i < recordIndex) v = recordedData[i];
-                        let y = (v * -1.0) * zoomY * (canvas.height / 2) + (canvas.height / 2);
-                        
-                        if (!hasMoved) { canvasCtx.moveTo(x, y); hasMoved = true; } 
-                        else { canvasCtx.lineTo(x, y); }
-                        x += sliceWidth;
-                        if (x > canvas.width) break; 
+                for (let i = startIndex; i < endIndex; i++) {
+                    let v = 0;
+                    if (i >= 0 && i < recordIndex) {
+                        v = recordedData[i % recordedData.length]; 
                     }
-                } else {
-                    const centerBuffer = Math.floor(recordIndex / 2);
-                    const halfSamples = Math.floor(samplesNeeded / 2);
-                    const startIndex = centerBuffer - halfSamples;
-                    const endIndex = startIndex + samplesNeeded;
-
-                    for (let i = startIndex; i < endIndex; i++) {
-                        let v = 0;
-                        if (i >= 0 && i < recordIndex) v = recordedData[i];
-                        let y = (v * -1.0) * zoomY * (canvas.height / 2) + (canvas.height / 2);
-                        
-                        if (!hasMoved) { canvasCtx.moveTo(x, y); hasMoved = true; } 
-                        else { canvasCtx.lineTo(x, y); }
-                        x += sliceWidth;
-                        if (x > canvas.width) break; 
-                    }
+                    let y = (v * -1.0) * zoomY * (canvas.height / 2) + (canvas.height / 2);
+                    
+                    if (!hasMoved) { canvasCtx.moveTo(x, y); hasMoved = true; } 
+                    else { canvasCtx.lineTo(x, y); }
+                    x += sliceWidth;
+                    if (x > canvas.width) break; 
                 }
                 
                 canvasCtx.stroke();
