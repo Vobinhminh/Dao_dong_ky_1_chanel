@@ -192,6 +192,7 @@
             if (qrImage) {
                 let currentUrl = window.location.href;
                 if (currentUrl.startsWith('file://')) {
+                    // Dòng thay đổi URL GitHub của thầy ở đây:
                     currentUrl = 'https://github.com/TenCuaThay/DaoDongKy'; 
                 }
                 qrImage.src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(currentUrl)}`;
@@ -233,22 +234,22 @@
         let targetFPS = 60;
         let lastDrawTime = performance.now();
         
+        // --- THUẬT TOÁN ĐIỀU CHỈNH TỐC ĐỘ QUÉT (ĐÃ ĐƯỢC TINH CHỈNH) ---
         speedSelect.addEventListener('change', (e) => {
             let val = parseInt(e.target.value);
-            if (val === 1) targetFPS = 15;      
-            else if (val === 2) targetFPS = 30; 
-            else targetFPS = 60;                
+            if (val === 1) targetFPS = 10;      // Chậm: 10 FPS (Quan sát rất rõ sự tắt dần)
+            else if (val === 2) targetFPS = 20; // Vừa: 20 FPS (Tối ưu để xem biến thiên tần số)
+            else targetFPS = 60;                // Nhanh: 60 FPS (Bình thường)
         });
 
         modeSelect.addEventListener('change', (e) => {
             isContinuousMode = (e.target.value === 'continuous');
         });
         
-        // FIX 1: Sửa lỗi mất đồ thị khi xoay màn hình (bỏ cờ 'true')
         function resizeCanvas() {
             canvas.width = canvas.clientWidth;
             canvas.height = canvas.clientHeight;
-            drawFrame(); // Gọi vẽ lại dữ liệu cũ, không clear
+            drawFrame(); 
         }
         window.addEventListener('resize', resizeCanvas);
 
@@ -285,7 +286,6 @@
                 totalTimeOnScreen = startDuration * (initialPinchDistX / dx); 
                 currentZoomY = startZoomY * (dy / initialPinchDistY);
 
-                // FIX 2: Hạ chặn thời gian xuống 0.002s để hiển thị chuẩn âm siêu bổng
                 totalTimeOnScreen = Math.max(0.002, Math.min(totalTimeOnScreen, 2.4));
                 currentZoomY = Math.max(0.5, Math.min(currentZoomY, 10.0));
 
@@ -307,7 +307,6 @@
                 currentZoomY *= 1.1;      
             }
             
-            // FIX 2: Tương tự như trên
             totalTimeOnScreen = Math.max(0.002, Math.min(totalTimeOnScreen, 2.4));
             currentZoomY = Math.max(0.5, Math.min(currentZoomY, 10.0));
             
@@ -485,7 +484,6 @@
         });
 
         pauseButton.addEventListener('click', () => {
-            // FIX 3: Đánh thức AudioContext nếu trình duyệt đưa vào chế độ ngủ (Suspend)
             if (audioCtx && audioCtx.state === 'suspended') {
                 audioCtx.resume();
             }
@@ -567,7 +565,6 @@
             if (!isUserZoomed) {
                 let freqForCalc = (detectedFrequency > 0) ? detectedFrequency : 440;
                 totalTimeOnScreen = 5 * (1.0 / freqForCalc);
-                // FIX 2: Tương tự như trên
                 totalTimeOnScreen = Math.max(0.002, Math.min(totalTimeOnScreen, 2.4));
             }
 
