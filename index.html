@@ -519,15 +519,18 @@
             }
         });
 
+        // ĐÃ SỬA LẠI NÚT LÀM MỚI THEO YÊU CẦU CỦA THẦY
         resetButton.addEventListener('click', () => {
             isPaused = true;
             clearTimeout(stopTimer); 
             pauseButton.textContent = "2. Đo / Dừng";
             pauseButton.style.backgroundColor = "#28a745"; 
             
+            // Xóa sạch dữ liệu sóng
             recordIndex = 0;
             recordedData.fill(0);
             
+            // Khôi phục thu phóng về mặc định
             isUserZoomed = false;
             detectedFrequency = 0;
             totalTimeOnScreen = 5 * (1.0 / 440); 
@@ -536,6 +539,9 @@
             infoText.textContent = "Sẵn sàng (Bấm 'Đo / Dừng' để tiếp tục)";
             infoText.style.color = "#007bff";
             
+            // KHÔNG reset modeSelect và speedSelect nữa. Giữ nguyên lựa chọn hiện tại.
+            
+            // Vẽ lại khung lưới trống
             drawFrame(true); 
         });
 
@@ -655,8 +661,6 @@
 
                 const samplesNeeded = Math.floor(totalTimeOnScreen * sampleRate);
                 
-                // THUẬT TOÁN KHỬ LAG ĐỒ HỌA (Decimation Peak-Preserving)
-                // Giảm tải cho GPU bằng cách gộp mẫu dựa trên chiều rộng pixel màn hình
                 const step = Math.max(1, Math.floor(samplesNeeded / (canvas.width * 2))); 
                 const sliceWidth = (canvas.width / samplesNeeded) * step;
                 
@@ -674,7 +678,6 @@
 
                     let v = recordedData[i % recordedData.length];
 
-                    // Kỹ thuật giữ lại biên độ thật (Max/Min) khi nội suy nhảy bước
                     if (step > 2) {
                         let maxV = v;
                         let minV = v;
