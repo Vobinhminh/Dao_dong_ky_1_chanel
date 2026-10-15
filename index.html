@@ -170,10 +170,10 @@
                     <option value="continuous">Chế độ: Khảo sát nguồn âm</option>
                 </select>
 
-                <!-- Đã tinh gọn lại chỉ còn 2 lựa chọn Nhanh và Chậm -->
+                <!-- Đã chỉnh sửa text theo yêu cầu của thầy -->
                 <select id="speedSelect" class="custom-select" style="display: none; flex: 1;">
-                    <option value="fast" selected>Tốc độ quét: Nhanh (Thực tế)</option>
-                    <option value="slow">Tốc độ quét: Chậm (Quan sát)</option>
+                    <option value="fast" selected>Nhanh</option>
+                    <option value="slow">Chậm</option>
                 </select>
             </div>
             
@@ -232,15 +232,14 @@
         let totalTimeOnScreen = 5 * (1.0 / 440); 
         let currentZoomY = 2.0;
 
-        let targetFPS = 60; // Gốc thực tế
+        let targetFPS = 60; 
         let lastDrawTime = performance.now();
         
-        // Cập nhật thuật toán điều khiển tốc độ (Chỉ còn Nhanh và Chậm)
         speedSelect.addEventListener('change', (e) => {
             if (e.target.value === 'slow') {
-                targetFPS = 10; // Chậm: Khóa 10 FPS để tạo hiệu ứng lưu ảnh võng mạc
+                targetFPS = 10; 
             } else {
-                targetFPS = 60; // Nhanh: Quét 60 FPS khớp đúng luồng âm thanh thực tế
+                targetFPS = 60; 
             }
         });
 
@@ -250,7 +249,7 @@
                 speedSelect.style.display = 'block';
             } else {
                 speedSelect.style.display = 'none';
-                targetFPS = 60; // Trả về tốc độ gốc
+                targetFPS = 60; 
                 speedSelect.value = "fast"; 
             }
         });
