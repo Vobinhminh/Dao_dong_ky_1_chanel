@@ -170,10 +170,10 @@
                     <option value="continuous">Chế độ: Khảo sát nguồn âm</option>
                 </select>
 
+                <!-- Đã tinh gọn lại chỉ còn 2 lựa chọn Nhanh và Chậm -->
                 <select id="speedSelect" class="custom-select" style="display: none; flex: 1;">
-                    <option value="3" selected>Tốc độ quét: Nhanh</option>
-                    <option value="2">Tốc độ quét: Vừa</option>
-                    <option value="1">Tốc độ quét: Chậm</option>
+                    <option value="fast" selected>Tốc độ quét: Nhanh (Thực tế)</option>
+                    <option value="slow">Tốc độ quét: Chậm (Quan sát)</option>
                 </select>
             </div>
             
@@ -232,14 +232,16 @@
         let totalTimeOnScreen = 5 * (1.0 / 440); 
         let currentZoomY = 2.0;
 
-        let targetFPS = 60;
+        let targetFPS = 60; // Gốc thực tế
         let lastDrawTime = performance.now();
         
+        // Cập nhật thuật toán điều khiển tốc độ (Chỉ còn Nhanh và Chậm)
         speedSelect.addEventListener('change', (e) => {
-            let val = parseInt(e.target.value);
-            if (val === 1) targetFPS = 10;      
-            else if (val === 2) targetFPS = 20; 
-            else targetFPS = 60;                
+            if (e.target.value === 'slow') {
+                targetFPS = 10; // Chậm: Khóa 10 FPS để tạo hiệu ứng lưu ảnh võng mạc
+            } else {
+                targetFPS = 60; // Nhanh: Quét 60 FPS khớp đúng luồng âm thanh thực tế
+            }
         });
 
         modeSelect.addEventListener('change', (e) => {
@@ -248,8 +250,8 @@
                 speedSelect.style.display = 'block';
             } else {
                 speedSelect.style.display = 'none';
-                targetFPS = 60; 
-                speedSelect.value = "3"; 
+                targetFPS = 60; // Trả về tốc độ gốc
+                speedSelect.value = "fast"; 
             }
         });
         
@@ -519,18 +521,15 @@
             }
         });
 
-        // ĐÃ SỬA LẠI NÚT LÀM MỚI THEO YÊU CẦU CỦA THẦY
         resetButton.addEventListener('click', () => {
             isPaused = true;
             clearTimeout(stopTimer); 
             pauseButton.textContent = "2. Đo / Dừng";
             pauseButton.style.backgroundColor = "#28a745"; 
             
-            // Xóa sạch dữ liệu sóng
             recordIndex = 0;
             recordedData.fill(0);
             
-            // Khôi phục thu phóng về mặc định
             isUserZoomed = false;
             detectedFrequency = 0;
             totalTimeOnScreen = 5 * (1.0 / 440); 
@@ -539,9 +538,6 @@
             infoText.textContent = "Sẵn sàng (Bấm 'Đo / Dừng' để tiếp tục)";
             infoText.style.color = "#007bff";
             
-            // KHÔNG reset modeSelect và speedSelect nữa. Giữ nguyên lựa chọn hiện tại.
-            
-            // Vẽ lại khung lưới trống
             drawFrame(true); 
         });
 
