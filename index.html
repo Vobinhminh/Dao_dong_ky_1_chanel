@@ -165,13 +165,11 @@
             <div id="settingsRow" style="display: none; gap: 6px; width: 100%;">
                 <select id="micSelect" class="custom-select" style="display: none; flex: 1;"></select>
                 
-                <!-- Đổi Chế độ thành Chức năng -->
                 <select id="modeSelect" class="custom-select" style="flex: 1;">
                     <option value="auto" selected>Chức năng: Khảo sát tần số của nguồn âm</option>
                     <option value="continuous">Chức năng: Khảo sát nguồn âm</option>
                 </select>
 
-                <!-- Thêm chữ Chế độ hiển thị đồ thị -->
                 <select id="speedSelect" class="custom-select" style="display: none; flex: 1;">
                     <option value="fast" selected>Chế độ hiển thị đồ thị: Nhanh</option>
                     <option value="slow">Chế độ hiển thị đồ thị: Chậm</option>
@@ -236,6 +234,20 @@
         let targetFPS = 60; 
         let lastDrawTime = performance.now();
         
+        // --- THUẬT TOÁN CHỐNG ĐƠ KHI CHUYỂN ỨNG DỤNG (TAB) ---
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && !isPaused) {
+                // Tự động tạm dừng nếu người dùng ẩn web đi
+                isPaused = true;
+                clearTimeout(stopTimer);
+                pauseButton.textContent = "2. Đo / Dừng";
+                pauseButton.style.backgroundColor = "#28a745";
+                infoText.textContent = "Đã tạm dừng do ẩn trang (Bấm Làm mới / Đo để tiếp tục)";
+                infoText.style.color = "#d93025";
+            }
+        });
+        // ------------------------------------------------------
+
         speedSelect.addEventListener('change', (e) => {
             if (e.target.value === 'slow') {
                 targetFPS = 10; 
@@ -527,6 +539,13 @@
             pauseButton.textContent = "2. Đo / Dừng";
             pauseButton.style.backgroundColor = "#28a745"; 
             
+            // --- NÂNG CẤP: ÉP ĐÁNH THỨC PHẦN CỨNG NẾU BỊ ĐƠ ---
+            if (audioCtx && audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            lastDrawTime = performance.now(); 
+            // --------------------------------------------------
+
             recordIndex = 0;
             recordedData.fill(0);
             
