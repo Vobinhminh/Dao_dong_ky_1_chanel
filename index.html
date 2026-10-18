@@ -2,7 +2,15 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- CÁC THẺ META BIẾN WEB THÀNH APP CHUYÊN NGHIỆP -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#f0f4f8">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Dao động ký">
+    <meta name="application-name" content="Dao động ký">
+    
     <title>Dao động ký (Oscilloscope) - Sóng âm</title>
     <style>
         html, body {
@@ -13,6 +21,8 @@
             background-color: #e6f7ff;
             font-family: sans-serif;
             overflow: hidden; 
+            /* Chống cuộn trang web (bounce effect) trên iOS */
+            overscroll-behavior-y: none;
         }
 
         body {
@@ -57,6 +67,7 @@
             outline: none;
             box-sizing: border-box;
             box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
+            appearance: auto;
         }
 
         .qr-panel {
@@ -234,10 +245,8 @@
         let targetFPS = 60; 
         let lastDrawTime = performance.now();
         
-        // --- THUẬT TOÁN CHỐNG ĐƠ KHI CHUYỂN ỨNG DỤNG (TAB) ---
         document.addEventListener('visibilitychange', () => {
             if (document.hidden && !isPaused) {
-                // Tự động tạm dừng nếu người dùng ẩn web đi
                 isPaused = true;
                 clearTimeout(stopTimer);
                 pauseButton.textContent = "2. Đo / Dừng";
@@ -246,7 +255,6 @@
                 infoText.style.color = "#d93025";
             }
         });
-        // ------------------------------------------------------
 
         speedSelect.addEventListener('change', (e) => {
             if (e.target.value === 'slow') {
@@ -539,12 +547,10 @@
             pauseButton.textContent = "2. Đo / Dừng";
             pauseButton.style.backgroundColor = "#28a745"; 
             
-            // --- NÂNG CẤP: ÉP ĐÁNH THỨC PHẦN CỨNG NẾU BỊ ĐƠ ---
             if (audioCtx && audioCtx.state === 'suspended') {
                 audioCtx.resume();
             }
             lastDrawTime = performance.now(); 
-            // --------------------------------------------------
 
             recordIndex = 0;
             recordedData.fill(0);
