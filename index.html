@@ -221,6 +221,9 @@
         let sampleRate = 48000; 
         let stopTimer; 
 
+        // CỜ ĐÁNH DẤU YÊU CẦU PHẢI BẤM NÚT LÀM MỚI
+        let needReset = false; 
+
         let recordedData;
         let recordIndex = 0;
 
@@ -234,18 +237,25 @@
         let targetFPS = 60; 
         let lastDrawTime = performance.now();
         
-        // --- THUẬT TOÁN CHỐNG ĐƠ KHI CHUYỂN ỨNG DỤNG (TAB) ---
+        // --- 1. SỰ KIỆN KHI THOÁT RA HOẶC TẮT MÀN HÌNH ---
         document.addEventListener('visibilitychange', () => {
-            if (document.hidden && !isPaused) {
+            if (document.hidden) {
                 isPaused = true;
+                needReset = true; // Yêu cầu người dùng phải bấm "Làm mới"
                 clearTimeout(stopTimer);
+                
+                // Cực kỳ quan trọng: Giải phóng thiết bị Micro để hệ điều hành không bị đơ
+                if (currentStream) {
+                    currentStream.getTracks().forEach(track => track.stop());
+                }
+
                 pauseButton.textContent = "2. Đo / Dừng";
                 pauseButton.style.backgroundColor = "#28a745";
-                infoText.textContent = "Đã tạm dừng do ẩn trang (Bấm Làm mới / Đo để tiếp tục)";
+                infoText.textContent = "⚠️ Bị gián đoạn! Vui lòng ấn 'Làm mới' trước khi đo.";
                 infoText.style.color = "#d93025";
             }
         });
-        // ------------------------------------------------------
+        // --------------------------------------------------
 
         speedSelect.addEventListener('change', (e) => {
             if (e.target.value === 'slow') {
@@ -384,10 +394,9 @@
             return freq;
         }
 
-        // Bản vá lỗi Timeout: Hỗ trợ thời gian trễ linh hoạt
-        function triggerAutoStop(delay = 2000) {
+        function triggerAutoStop(delay) {
             clearTimeout(stopTimer);
-            if (!isPaused && !isContinuousMode) {
+            if (delay > 0 && !isPaused) {
                 stopTimer = setTimeout(() => {
                     if (!isPaused) {
                         isPaused = true;
@@ -450,6 +459,11 @@
                 audioSource = audioCtx.createMediaStreamSource(currentStream);
                 audioSource.connect(highpassFilter);
 
+                // Khôi phục Context nếu hệ điều hành tạm dừng nó
+                if (audioCtx.state === 'suspended') {
+                    await audioCtx.resume();
+                }
+
                 isPaused = true;
                 resizeCanvas();
                 drawFrame(true); 
@@ -492,6 +506,7 @@
         micSelect.addEventListener('change', (e) => {
             initAudio(e.target.value); 
             isPaused = true;
+            needReset = false;
             clearTimeout(stopTimer); 
             pauseButton.textContent = "2. Đo / Dừng";
             pauseButton.style.backgroundColor = "#28a745"; 
@@ -501,25 +516,20 @@
             drawFrame(true);
         });
 
-        // BẢN VÁ LỖI: Đồng bộ hóa User Gesture và bù trừ độ trễ khởi động phần cứng
+        // --- 2. XỬ LÝ NÚT ĐO YÊU CẦU PHẢI RESET ---
         pauseButton.addEventListener('click', async () => {
+            if (needReset) {
+                alert("Hệ thống Micro đã bị gián đoạn. Vui lòng bấm nút '3. Làm mới' để kết nối lại trước khi đo!");
+                return; // Chặn không cho đo, bắt buộc phải Reset
+            }
+
             if (isPaused) {
-                // 1. Ép AudioContext resume ngay lập tức để giữ quyền ưu tiên thao tác của Apple/Safari
+                // Ép AudioContext resume (Dành cho iOS Safari)
                 if (audioCtx && audioCtx.state === 'suspended') {
                     await audioCtx.resume();
                 }
 
-                let delayStop = 2000; // Đo tự động trong 2 giây ở điều kiện bình thường
-
-                // 2. Kiểm tra luồng phần cứng bị ngắt để khôi phục
-                if (!currentStream || currentStream.getAudioTracks().length === 0 || currentStream.getAudioTracks()[0].readyState === 'ended') {
-                    let currentMic = (micSelect.style.display !== 'none') ? micSelect.value : null;
-                    await initAudio(currentMic);
-                    
-                    // NÂNG CẤP: Khi phần cứng bị ngủ đông, nó cần thời gian để "làm ấm".
-                    // Ta tăng độ dài thời gian đo lên 4 giây để bù lại khoảng thời gian trống âm thanh đầu tiên này.
-                    delayStop = 4000; 
-                }
+                let delayStop = isContinuousMode ? 0 : 2000; 
 
                 isPaused = false;
                 recordIndex = 0; 
@@ -547,17 +557,26 @@
             }
         });
 
-        resetButton.addEventListener('click', () => {
+        // --- 3. NÚT LÀM MỚI CHỊU TRÁCH NHIỆM KẾT NỐI LẠI ---
+        resetButton.addEventListener('click', async () => {
             isPaused = true;
             clearTimeout(stopTimer); 
             pauseButton.textContent = "2. Đo / Dừng";
             pauseButton.style.backgroundColor = "#28a745"; 
             
-            if (audioCtx && audioCtx.state === 'suspended') {
-                audioCtx.resume();
+            // Nếu có cờ báo lỗi bị HĐH ngắt, tiến hành xin cấp lại quyền Micro từ đầu
+            if (needReset || !currentStream || currentStream.getAudioTracks().length === 0 || currentStream.getAudioTracks()[0].readyState === 'ended') {
+                infoText.textContent = "Đang khởi động lại phần cứng Micro...";
+                let currentMic = (micSelect.style.display !== 'none') ? micSelect.value : null;
+                await initAudio(currentMic);
+            } else if (audioCtx && audioCtx.state === 'suspended') {
+                await audioCtx.resume();
             }
-            lastDrawTime = performance.now(); 
 
+            // Xóa cờ lỗi, cho phép đo trở lại
+            needReset = false; 
+            
+            lastDrawTime = performance.now(); 
             recordIndex = 0;
             recordedData.fill(0);
             
