@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dao-dong-ky-offline-v3';
+const CACHE_NAME = 'dao-dong-ky-offline-v1';
 const urlsToCache = [
   './',
   './index.html',
