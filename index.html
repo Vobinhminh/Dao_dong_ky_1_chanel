@@ -107,12 +107,12 @@
                 
                 <select id="modeSelect" class="custom-select" style="flex: 1;">
                     <option value="auto" selected>Chức năng: Khảo sát tần số của nguồn âm</option>
-                    <option value="continuous">Chức năng: Khảo sát nguồn âm</option>
+                    <option value="continuous">Chức năng: Khảo sát nguồn âm (Liên tục)</option>
                 </select>
 
                 <select id="speedSelect" class="custom-select" style="display: none; flex: 1;">
                     <option value="fast" selected>Chế độ hiển thị đồ thị: Nhanh</option>
-                    <option value="slow">Chế độ hiển thị đồ thị: Chậm</option>
+                    <option value="slow">Chế độ hiển thị đồ thị: Chậm (Lưu ảnh)</option>
                 </select>
             </div>
             
@@ -184,16 +184,30 @@
         let targetFPS = 60; 
         let lastDrawTime = performance.now();
         
+        // --- THUẬT TOÁN BẢO VỆ BỘ NHỚ VÀ QUYỀN RIÊNG TƯ (CHỐNG TREO MÁY) ---
         document.addEventListener('visibilitychange', () => {
             if (document.hidden && !isPaused) {
+                // Khi thoát ra ngoài: Tạm dừng để chống tràn RAM
                 isPaused = true;
                 clearTimeout(stopTimer);
                 pauseButton.textContent = "2. Đo / Dừng";
                 pauseButton.style.backgroundColor = "#28a745";
-                infoText.textContent = "Đã tạm dừng do ẩn trang (Bấm Làm mới / Đo để tiếp tục)";
+                infoText.textContent = "Đã tạm dừng (Bảo vệ bộ nhớ & Micro)";
                 infoText.style.color = "#d93025";
+            } else if (!document.hidden) {
+                // Khi quay lại: Kiểm tra xem OS có ngắt Micro không
+                if (currentStream) {
+                    let tracks = currentStream.getAudioTracks();
+                    if (tracks.length > 0 && tracks[0].readyState === 'ended') {
+                        infoText.textContent = "Hệ thống OS đã ngắt Micro. Vui lòng bấm '1. Bật Micro' lại!";
+                        infoText.style.color = "#dc3545";
+                        startButton.disabled = false;
+                        startButton.textContent = "1. Bật Micro";
+                    }
+                }
             }
         });
+        // ------------------------------------------------------------------
 
         speedSelect.addEventListener('change', (e) => {
             if (e.target.value === 'slow') { targetFPS = 10; } else { targetFPS = 60; }
@@ -385,6 +399,11 @@
         pauseButton.addEventListener('click', () => {
             if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
             if (isPaused) {
+                // Kiểm tra lại xem mic có bị ngắt không trước khi thu
+                if (currentStream && currentStream.getAudioTracks()[0].readyState === 'ended') {
+                    alert("Hệ thống đã ngắt Micro. Vui lòng bấm 'Làm mới' và kết nối lại!");
+                    return;
+                }
                 isPaused = false; recordIndex = 0; recordedData.fill(0);
                 isUserZoomed = false; detectedFrequency = 0;
                 pauseButton.textContent = "Đang đo..."; pauseButton.style.backgroundColor = "#dc3545"; 
@@ -402,6 +421,7 @@
         resetButton.addEventListener('click', () => {
             isPaused = true; clearTimeout(stopTimer); 
             pauseButton.textContent = "2. Đo / Dừng"; pauseButton.style.backgroundColor = "#28a745"; 
+            startButton.disabled = false; startButton.textContent = "1. Bật Micro";
             if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
             lastDrawTime = performance.now(); 
             recordIndex = 0; recordedData.fill(0);
@@ -436,7 +456,16 @@
                 totalTimeOnScreen = Math.max(0.002, Math.min(totalTimeOnScreen, 2.4));
             }
             const zoomY = currentZoomY;
-            canvasCtx.fillStyle = '#e6f7ff'; canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // --- THUẬT TOÁN LƯU ẢNH (TRACE PERSISTENCE) CHẾ ĐỘ QUÉT CHẬM ---
+            if (targetFPS === 10 && !isPaused && !isReset) { 
+                canvasCtx.fillStyle = 'rgba(230, 247, 255, 0.15)'; // Bán trong suốt để lưu vết cũ
+            } else {
+                canvasCtx.fillStyle = '#e6f7ff'; // Xóa sạch nền cũ
+            }
+            canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+            // ----------------------------------------------------------------
+
             canvasCtx.strokeStyle = '#b3e0ff'; canvasCtx.lineWidth = 1;
             const stepGridX = canvas.width / 10; const stepGridY = canvas.height / 8;  
             canvasCtx.beginPath();
