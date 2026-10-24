@@ -6,7 +6,7 @@
     <title>Khảo sát nguồn âm</title>
     <link rel="manifest" href="manifest.json">
     <style>
-        body {
+        html, body {
             margin: 0;
             padding: 0;
             background-color: #f4f7f6;
@@ -14,7 +14,8 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            height: 100vh;
+            height: 100dvh; 
+            width: 100%;
             overflow: hidden;
         }
         .header {
@@ -22,7 +23,7 @@
             background-color: #0056b3;
             color: white;
             text-align: center;
-            padding: 15px 0;
+            padding: calc(15px + env(safe-area-inset-top)) 0 15px 0;
             font-size: 22px;
             font-weight: bold;
             box-shadow: 0 2px 5px rgba(0,0,0,0.2);
@@ -36,6 +37,7 @@
             border-radius: 8px;
             box-shadow: inset 0 0 10px rgba(0,0,0,0.1);
             position: relative;
+            min-height: 0; 
         }
         canvas {
             width: 100%;
@@ -49,9 +51,10 @@
             justify-content: center;
             flex-wrap: wrap;
             gap: 10px;
-            padding: 10px;
+            padding: 10px 10px calc(10px + env(safe-area-inset-bottom)) 10px;
             background: white;
             box-shadow: 0 -2px 5px rgba(0,0,0,0.1);
+            box-sizing: border-box;
         }
         button {
             padding: 12px 20px;
@@ -77,6 +80,7 @@
             font-size: 14px;
             color: #d93025;
             font-weight: bold;
+            min-height: 20px;
         }
     </style>
 </head>
@@ -107,7 +111,6 @@
         const canvasCtx = canvas.getContext('2d');
         const statusText = document.getElementById('status');
 
-        // Hàm thay đổi kích thước Canvas cho vừa màn hình
         function resizeCanvas() {
             canvas.width = canvas.parentElement.clientWidth;
             canvas.height = canvas.parentElement.clientHeight;
@@ -115,10 +118,8 @@
         window.addEventListener('resize', resizeCanvas);
         resizeCanvas();
 
-        // Hàm khởi tạo Audio và Micro
         async function initAudio() {
             try {
-                // Xóa stream cũ nếu có để tránh kẹt bộ nhớ
                 if (currentStream) {
                     currentStream.getTracks().forEach(track => track.stop());
                 }
@@ -150,20 +151,17 @@
             }
         }
 
-        // Hàm vẽ đồ thị
         function draw(timestamp) {
             if (isPaused) return;
             requestID = requestAnimationFrame(draw);
 
-            // Xử lý giảm tốc độ khung hình (Quét chậm)
             if (isSlowMode) {
-                if (timestamp - lastDrawTime < 100) return; // ~10 FPS
+                if (timestamp - lastDrawTime < 100) return; 
                 lastDrawTime = timestamp;
             }
 
             analyser.getByteTimeDomainData(dataArray);
 
-            // BỎ HIỆU ỨNG LƯU ẢNH: Luôn xóa sạch màn hình bằng màu nền đặc 100%
             canvasCtx.fillStyle = '#e6f7ff';
             canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -174,7 +172,6 @@
             let sliceWidth = canvas.width * 1.0 / analyser.frequencyBinCount;
             let x = 0;
 
-            // Thuật toán giữ đỉnh (Peak-Preserving) chống đứt nét
             for (let i = 0; i < analyser.frequencyBinCount; i++) {
                 let v = dataArray[i] / 128.0;
                 let y = v * canvas.height / 2;
@@ -191,21 +188,16 @@
             canvasCtx.stroke();
         }
 
-        // Xử lý nút Bật Micro
         document.getElementById('btnStart').addEventListener('click', initAudio);
 
-        // Xử lý nút Đo / Dừng (Tích hợp chống đơ)
         document.getElementById('btnPause').addEventListener('click', () => {
             if (isPaused) {
-                // Nếu đang tạm dừng mà ấn Đo: Kiểm tra xem Micro có bị ngắt không
                 if (audioContext && audioContext.state === 'suspended') {
                     audioContext.resume();
                 }
                 if (!currentStream || currentStream.getAudioTracks()[0].readyState === 'ended') {
-                    // Micro đã bị điện thoại ngắt -> Tự động kết nối lại
                     initAudio(); 
                 } else {
-                    // Vẫn bình thường -> Vẽ tiếp
                     isPaused = false;
                     statusText.style.color = "#28a745";
                     statusText.innerText = "Đang khảo sát...";
@@ -214,11 +206,10 @@
             } else {
                 isPaused = true;
                 statusText.style.color = "#d93025";
-                statusText.innerText = "Đã tạm dừng (Ấn 'Đo' để tiếp tục)";
+                statusText.innerText = "Đã tạm dừng (Ấn 'Đo / Dừng' để tiếp tục)";
             }
         });
 
-        // Xử lý nút tốc độ
         const btnSlow = document.getElementById('btnSlow');
         btnSlow.addEventListener('click', () => {
             isSlowMode = !isSlowMode;
@@ -226,7 +217,6 @@
             btnSlow.style.backgroundColor = isSlowMode ? "#dc3545" : "#ff9800";
         });
 
-        // Xử lý khi ẩn ứng dụng (Chống tràn RAM)
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
                 isPaused = true;
@@ -235,7 +225,6 @@
             }
         });
 
-        // Đăng ký Service Worker cho tính năng Ngoại tuyến (PWA)
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('sw.js').then(() => {
                 console.log('Service Worker Registered');
