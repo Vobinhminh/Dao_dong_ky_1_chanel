@@ -4,8 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dao động ký (Oscilloscope) - Sóng âm</title>
+    
+    <!-- KHAI BÁO ICON CHO MÁY TÍNH VÀ ĐIỆN THOẠI -->
     <link rel="icon" type="image/png" href="icon.png">
     <link rel="apple-touch-icon" href="icon.png">
+
     <style>
         html, body {
             margin: 0;
@@ -61,6 +64,13 @@
             box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
         }
 
+        /* KHUNG CHỨA 2 MÃ QR (Mặc định hiển thị, sẽ ẩn đi nếu mở bằng quét QR) */
+        .qr-container {
+            display: flex;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+
         .qr-panel {
             display: flex;
             flex-direction: column;
@@ -69,16 +79,15 @@
             background: #fff;
             border: 1px solid #ccc;
             border-radius: 6px;
-            padding: 6px;
+            padding: 4px;
             box-sizing: border-box;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            width: 94px; 
-            flex-shrink: 0;
+            width: 80px; 
         }
 
         .qr-panel img {
-            width: 65px; 
-            height: 65px;
+            width: 52px; 
+            height: 52px;
             border: 1px solid #eee;
         }
 
@@ -86,15 +95,15 @@
             font-size: 9px;
             font-weight: bold;
             color: #d93025;
-            margin-top: 4px;
+            margin-top: 3px;
             line-height: 1;
             white-space: nowrap; 
         }
 
-        @media (max-width: 800px) {
+        @media (max-width: 900px) {
             .top-bar { padding: 0; gap: 0; }
             .controls-wrapper { padding: 8px; }
-            .qr-panel { display: none; } 
+            .qr-container { display: none; } 
             .btn-group { grid-template-columns: 1fr 1fr 1fr; }
         }
 
@@ -181,9 +190,16 @@
             <div class="info-panel" id="infoText">Đang chờ bật Micro...</div>
         </div>
         
-        <div class="qr-panel" id="qrPanel">
-            <img id="qrImage" src="" alt="QR Code">
-            <span class="scan-title">Dao động ký</span>
+        <!-- KHU VỰC CHỨA 2 MÃ QR (Được điều khiển hiển thị bằng JS) -->
+        <div class="qr-container" id="qrContainer">
+            <div class="qr-panel">
+                <img id="qrTeacher" src="" alt="QR Giáo Viên">
+                <span class="scan-title">Giáo Viên</span>
+            </div>
+            <div class="qr-panel">
+                <img id="qrStudent" src="" alt="QR Học Sinh">
+                <span class="scan-title">Học Sinh (45p)</span>
+            </div>
         </div>
     </div>
 
@@ -191,13 +207,34 @@
 
     <script>
         window.addEventListener('DOMContentLoaded', () => {
-            const qrImage = document.getElementById('qrImage');
-            if (qrImage) {
-                let currentUrl = window.location.href;
+            const qrContainer = document.getElementById('qrContainer');
+            const urlParams = new URLSearchParams(window.location.search);
+
+            // KIỂM TRA NẾU ĐƯỜNG DẪN ĐƯỢC MỞ QUA QUÉT MÃ (Có chứa tham số ?source=qr)
+            if (urlParams.has('source') && urlParams.get('source') === 'qr') {
+                if (qrContainer) {
+                    qrContainer.style.display = 'none'; // Ẩn hẳn cụm QR đi trên mọi thiết bị
+                }
+            } else {
+                // Nếu mở bằng đường link thông thường, tiến hành tạo 2 mã QR tự động kèm theo cờ ?source=qr
+                const qrTeacher = document.getElementById('qrTeacher');
+                const qrStudent = document.getElementById('qrStudent');
+                
+                let currentUrl = window.location.href.split('?')[0]; // Lấy link sạch không kèm tham số cũ
                 if (currentUrl.startsWith('file://')) {
                     currentUrl = 'https://github.com/TenCuaThay/DaoDongKy'; 
                 }
-                qrImage.src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(currentUrl)}`;
+
+                // Tạo URL riêng biệt đính kèm cờ nhận diện quét QR cho Giáo viên và Học sinh
+                let teacherScanUrl = currentUrl + '?source=qr&role=teacher';
+                let studentUrl = currentUrl + '?source=qr&role=student&duration=45min';
+
+                if (qrTeacher) {
+                    qrTeacher.src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(teacherScanUrl)}`;
+                }
+                if (qrStudent) {
+                    qrStudent.src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(studentUrl)}`;
+                }
             }
         });
 
@@ -223,9 +260,7 @@
         let sampleRate = 48000; 
         let stopTimer; 
 
-        // CỜ ĐÁNH DẤU YÊU CẦU PHẢI BẤM NÚT LÀM MỚI
         let needReset = false; 
-
         let recordedData;
         let recordIndex = 0;
 
@@ -239,14 +274,12 @@
         let targetFPS = 60; 
         let lastDrawTime = performance.now();
         
-        // --- 1. SỰ KIỆN KHI THOÁT RA HOẶC TẮT MÀN HÌNH ---
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
                 isPaused = true;
-                needReset = true; // Yêu cầu người dùng phải bấm "Làm mới"
+                needReset = true; 
                 clearTimeout(stopTimer);
                 
-                // Cực kỳ quan trọng: Giải phóng thiết bị Micro để hệ điều hành không bị đơ
                 if (currentStream) {
                     currentStream.getTracks().forEach(track => track.stop());
                 }
@@ -257,7 +290,6 @@
                 infoText.style.color = "#d93025";
             }
         });
-        // --------------------------------------------------
 
         speedSelect.addEventListener('change', (e) => {
             if (e.target.value === 'slow') {
@@ -461,7 +493,6 @@
                 audioSource = audioCtx.createMediaStreamSource(currentStream);
                 audioSource.connect(highpassFilter);
 
-                // Khôi phục Context nếu hệ điều hành tạm dừng nó
                 if (audioCtx.state === 'suspended') {
                     await audioCtx.resume();
                 }
@@ -518,15 +549,13 @@
             drawFrame(true);
         });
 
-        // --- 2. XỬ LÝ NÚT ĐO YÊU CẦU PHẢI RESET ---
         pauseButton.addEventListener('click', async () => {
             if (needReset) {
                 alert("Hệ thống Micro đã bị gián đoạn. Vui lòng bấm nút '3. Làm mới' để kết nối lại trước khi đo!");
-                return; // Chặn không cho đo, bắt buộc phải Reset
+                return; 
             }
 
             if (isPaused) {
-                // Ép AudioContext resume (Dành cho iOS Safari)
                 if (audioCtx && audioCtx.state === 'suspended') {
                     await audioCtx.resume();
                 }
@@ -559,14 +588,12 @@
             }
         });
 
-        // --- 3. NÚT LÀM MỚI CHỊU TRÁCH NHIỆM KẾT NỐI LẠI ---
         resetButton.addEventListener('click', async () => {
             isPaused = true;
             clearTimeout(stopTimer); 
             pauseButton.textContent = "2. Đo / Dừng";
             pauseButton.style.backgroundColor = "#28a745"; 
             
-            // Nếu có cờ báo lỗi bị HĐH ngắt, tiến hành xin cấp lại quyền Micro từ đầu
             if (needReset || !currentStream || currentStream.getAudioTracks().length === 0 || currentStream.getAudioTracks()[0].readyState === 'ended') {
                 infoText.textContent = "Đang khởi động lại phần cứng Micro...";
                 let currentMic = (micSelect.style.display !== 'none') ? micSelect.value : null;
@@ -575,7 +602,6 @@
                 await audioCtx.resume();
             }
 
-            // Xóa cờ lỗi, cho phép đo trở lại
             needReset = false; 
             
             lastDrawTime = performance.now(); 
@@ -738,6 +764,7 @@
                         }
                         
                         let yMin = (minV * -1.0) * zoomY * (canvas.height / 2) + (canvas.height / 2);
+                        + (canvas.height / 2);
                         if (!hasMoved) { canvasCtx.moveTo(x, yMin); hasMoved = true; } 
                         else { canvasCtx.lineTo(x, yMin); }
                         
@@ -748,7 +775,7 @@
                     } else {
                         let y = (v * -1.0) * zoomY * (canvas.height / 2) + (canvas.height / 2);
                         if (!hasMoved) { canvasCtx.moveTo(x, y); hasMoved = true; } 
-                        else { canvasCtx.lineTo(x, y); }
+                        else { canvas`+`ctx.lineTo(x, y); }
                         x += sliceWidth;
                     }
 
