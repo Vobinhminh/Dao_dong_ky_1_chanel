@@ -64,7 +64,7 @@
             box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
         }
 
-        /* KHUNG CHỨA 2 MÃ QR (Mặc định hiển thị, sẽ ẩn đi nếu mở bằng quét QR) */
+        /* KHUNG CHỨA 2 MÃ QR */
         .qr-container {
             display: flex;
             gap: 6px;
@@ -190,15 +190,15 @@
             <div class="info-panel" id="infoText">Đang chờ bật Micro...</div>
         </div>
         
-        <!-- KHU VỰC CHỨA 2 MÃ QR (Được điều khiển hiển thị bằng JS) -->
+        <!-- KHU VỰC CHỨA 2 MÃ QR (Daodongki_GV & Daodongki_HS) -->
         <div class="qr-container" id="qrContainer">
             <div class="qr-panel">
                 <img id="qrTeacher" src="" alt="QR Giáo Viên">
-                <span class="scan-title">Giáo Viên</span>
+                <span class="scan-title">Daodongki_GV</span>
             </div>
             <div class="qr-panel">
                 <img id="qrStudent" src="" alt="QR Học Sinh">
-                <span class="scan-title">Học Sinh (45p)</span>
+                <span class="scan-title">Daodongki_HS</span>
             </div>
         </div>
     </div>
@@ -210,27 +210,26 @@
             const qrContainer = document.getElementById('qrContainer');
             const urlParams = new URLSearchParams(window.location.search);
 
-            // KIỂM TRA NẾU ĐƯỜNG DẪN ĐƯỢC MỞ QUA QUÉT MÃ (Có chứa tham số ?source=qr)
+            // NẾU ĐƯỢC MỞ QUA QUÉT MÃ QR -> TỰ ĐỘNG ẨN CỤM QR ĐI TRÊN MỌI THIẾT BỊ
             if (urlParams.has('source') && urlParams.get('source') === 'qr') {
                 if (qrContainer) {
-                    qrContainer.style.display = 'none'; // Ẩn hẳn cụm QR đi trên mọi thiết bị
+                    qrContainer.style.display = 'none';
                 }
             } else {
-                // Nếu mở bằng đường link thông thường, tiến hành tạo 2 mã QR tự động kèm theo cờ ?source=qr
+                // NẾU MỞ BẰNG ĐƯỜNG LINK TRÌNH DUYỆT THÔNG THƯỜNG -> TẠO 2 MÃ QR
                 const qrTeacher = document.getElementById('qrTeacher');
                 const qrStudent = document.getElementById('qrStudent');
                 
-                let currentUrl = window.location.href.split('?')[0]; // Lấy link sạch không kèm tham số cũ
+                let currentUrl = window.location.href.split('?')[0];
                 if (currentUrl.startsWith('file://')) {
                     currentUrl = 'https://github.com/TenCuaThay/DaoDongKy'; 
                 }
 
-                // Tạo URL riêng biệt đính kèm cờ nhận diện quét QR cho Giáo viên và Học sinh
-                let teacherScanUrl = currentUrl + '?source=qr&role=teacher';
+                let teacherUrl = currentUrl + '?source=qr&role=teacher';
                 let studentUrl = currentUrl + '?source=qr&role=student&duration=45min';
 
                 if (qrTeacher) {
-                    qrTeacher.src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(teacherScanUrl)}`;
+                    qrTeacher.src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(teacherUrl)}`;
                 }
                 if (qrStudent) {
                     qrStudent.src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(studentUrl)}`;
@@ -764,7 +763,6 @@
                         }
                         
                         let yMin = (minV * -1.0) * zoomY * (canvas.height / 2) + (canvas.height / 2);
-                        + (canvas.height / 2);
                         if (!hasMoved) { canvasCtx.moveTo(x, yMin); hasMoved = true; } 
                         else { canvasCtx.lineTo(x, yMin); }
                         
@@ -775,7 +773,7 @@
                     } else {
                         let y = (v * -1.0) * zoomY * (canvas.height / 2) + (canvas.height / 2);
                         if (!hasMoved) { canvasCtx.moveTo(x, y); hasMoved = true; } 
-                        else { canvas`+`ctx.lineTo(x, y); }
+                        else { canvasCtx.lineTo(x, y); }
                         x += sliceWidth;
                     }
 
