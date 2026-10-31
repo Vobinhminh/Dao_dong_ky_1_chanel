@@ -16,9 +16,9 @@
         .btn-group { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; width: 100%; }
         .custom-select { padding: 6px; font-size: 13px; font-weight: bold; color: #0056b3; border-radius: 6px; border: 1px solid #ccc; background-color: #fff; width: 100%; cursor: pointer; outline: none; box-sizing: border-box; }
         
-        /* KHUNG CHỨA QR CODE - Tự động cao bằng 3 dòng bên trái */
+        /* KHUNG CHỨA QR CODE */
         .qr-container { display: flex; gap: 6px; flex-shrink: 0; }
-        .qr-panel { display: flex; flex-direction: column; align-items: center; justify-content: center; background: #fff; border: 1px solid #ccc; border-radius: 6px; padding: 4px; box-sizing: border-box; width: 85px; }
+        .qr-panel { display: flex; flex-direction: column; align-items: center; justify-content: center; background: #fff; border: 1px solid #ccc; border-radius: 6px; padding: 4px; box-sizing: border-box; width: 95px; }
         .qr-panel img { width: 55px; height: 55px; border: 1px solid #eee; }
         .qr-panel .scan-title { font-size: 10px; font-weight: bold; color: #d93025; margin-top: 4px; text-align: center; line-height: 1.2; }
         
@@ -63,11 +63,11 @@
         <div class="qr-container" id="qrContainer">
             <div class="qr-panel">
                 <img id="qrTeacher" src="" alt="QR GV">
-                <span class="scan-title">Giáo Viên<br>(Vô hạn)</span>
+                <span class="scan-title">Daodongki_GV</span>
             </div>
             <div class="qr-panel">
                 <img id="qrStudent" src="" alt="QR HS">
-                <span class="scan-title">Học Sinh<br>(30 Phút)</span>
+                <span class="scan-title">Daodongki</span>
             </div>
         </div>
     </div>
@@ -82,13 +82,11 @@
             const urlParams = new URLSearchParams(window.location.search);
             const role = urlParams.get('role');
 
-            // Nếu mở trên điện thoại quét mã thì tự động ẩn khung QR đi cho gọn
             if (role) {
                 const qrContainer = document.getElementById('qrContainer');
                 if (qrContainer) qrContainer.style.display = 'none'; 
             }
 
-            // Xử lý giới hạn 30 phút cho Học sinh
             if (role === 'student') {
                 const timeLimitMinutes = 30; 
                 setTimeout(() => {
@@ -101,7 +99,6 @@
                 }, timeLimitMinutes * 60 * 1000);
             }
 
-            // Tự động tạo 2 ảnh QR Code (GV và HS)
             if (!role) {
                 let currentUrl = window.location.href.split('?')[0];
                 if (currentUrl.startsWith('file://')) currentUrl = 'https://github.com/TenCuaThay/DaoDongKy';
@@ -115,7 +112,7 @@
         });
 
         // =================================================================
-        // 2. AUDIOWORKLET MODULE (Xử lý âm thanh độc lập - Không gây giật lag)
+        // 2. AUDIOWORKLET MODULE
         // =================================================================
         const workletCode = `
         class ScopeWorkletProcessor extends AudioWorkletProcessor {
@@ -130,7 +127,6 @@
         const workletBlob = new Blob([workletCode], { type: 'application/javascript' });
         const workletUrl = URL.createObjectURL(workletBlob);
 
-        // Các biến DOM
         const startButton = document.getElementById('startButton');
         const pauseButton = document.getElementById('pauseButton');
         const resetButton = document.getElementById('resetButton');
@@ -151,7 +147,6 @@
         let totalTimeOnScreen = 5 * (1.0 / 440), currentZoomY = 2.0;
         let targetFPS = 60, lastDrawTime = performance.now();
 
-        // Tự động dừng đo khi ẩn màn hình điện thoại ra ngoài
         document.addEventListener('visibilitychange', () => {
             if (document.hidden && !isPaused) {
                 pauseMeasurement(true);
@@ -169,7 +164,6 @@
         function resizeCanvas() { canvas.width = canvas.clientWidth; canvas.height = canvas.clientHeight; drawFrame(); }
         window.addEventListener('resize', resizeCanvas);
 
-        // Điều khiển Zoom trên màn hình cảm ứng / Chuột
         let startDuration, startZoomY, initialPinchDistX, initialPinchDistY;
         canvas.addEventListener('touchstart', e => {
             if (e.touches.length === 2 && isPaused) {
