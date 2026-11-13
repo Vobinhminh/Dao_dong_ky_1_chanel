@@ -3,9 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#f0f4f8">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Dao động ký">
+    <meta name="application-name" content="Dao động ký">
     <title>Dao động ký (Oscilloscope) - Tích hợp AudioWorklet</title>
     
-    <!-- KHAI BÁO ICON -->
+    <!-- KHAI BÁO ICON & MANIFEST -->
+    <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/png" href="icon.png">
     <link rel="apple-touch-icon" href="icon.png">
 
@@ -79,6 +86,7 @@
         // 1. KIỂM TRA PHÂN QUYỀN VÀ GIỚI HẠN 30 PHÚT
         // =================================================================
         window.addEventListener('DOMContentLoaded', () => {
+            resizeCanvas();
             const urlParams = new URLSearchParams(window.location.search);
             const role = urlParams.get('role');
 
@@ -139,7 +147,7 @@
         const canvas = document.getElementById('oscilloscope');
         const canvasCtx = canvas.getContext('2d');
         
-        let audioCtx, scopeWorkletNode, highpassFilter, lowpassFilter, currentStream, audioSource;
+        let audioCtx, scopeWorkletNode, highpassFilter, lowpassFilter, dummyGain, currentStream, audioSource;
         let isPaused = true, isContinuousMode = false, needReset = false;
         let sampleRate = 48000, recordIndex = 0, stopTimer;
         let recordedData;
@@ -149,8 +157,13 @@
 
         document.addEventListener('visibilitychange', () => {
             if (document.hidden && !isPaused) {
+                needReset = true;
                 pauseMeasurement(true);
                 infoText.textContent = "⚠️ Bị gián đoạn! Vui lòng bấm 'Làm mới' trước khi đo lại.";
+                infoText.style.color = "#d93025";
+            } else if (!document.hidden && isPaused && swRegistration) {
+                // Tự động kiểm tra bản cập nhật mới khi người dùng quay lại ứng dụng
+                swRegistration.update().catch(() => {});
             }
         });
 
@@ -159,6 +172,13 @@
             isContinuousMode = e.target.value === 'continuous';
             speedSelect.style.display = isContinuousMode ? 'block' : 'none';
             if (!isContinuousMode) { targetFPS = 60; speedSelect.value = "fast"; }
+            if (!isPaused) {
+                clearTimeout(stopTimer);
+                infoText.textContent = isContinuousMode ? "Khảo sát nguồn âm (Đang thu...)" : "Khảo sát tần số (Quét Live)...";
+                if (!isContinuousMode) {
+                    stopTimer = setTimeout(() => { if (!isPaused) pauseMeasurement(); }, 2000);
+                }
+            }
         });
 
         function resizeCanvas() { canvas.width = canvas.clientWidth; canvas.height = canvas.clientHeight; drawFrame(); }
@@ -219,6 +239,7 @@
             let maxval = -1, maxpos = -1;
             for (let i = d; i < SIZE / 2; i++) if (c[i] > maxval) { maxval = c[i]; maxpos = i; }
             
+            if (maxpos <= 0) return -1;
             let freq = sampleRate / maxpos;
             return (freq >= 100 && freq <= 1500) ? freq : -1;
         }
@@ -233,7 +254,7 @@
                 scopeWorkletNode = new AudioWorkletNode(audioCtx, 'scope-worklet');
 
                 scopeWorkletNode.port.onmessage = e => {
-                    if (!isPaused) {
+                    if (!isPaused && recordedData) {
                         const inputData = e.data;
                         for (let i = 0; i < inputData.length; i++) recordedData[recordIndex++ % recordedData.length] = inputData[i];
                     }
@@ -241,7 +262,8 @@
 
                 highpassFilter = audioCtx.createBiquadFilter(); highpassFilter.type = 'highpass'; highpassFilter.frequency.value = 80;
                 lowpassFilter = audioCtx.createBiquadFilter(); lowpassFilter.type = 'lowpass'; lowpassFilter.frequency.value = 3000;
-                highpassFilter.connect(lowpassFilter); lowpassFilter.connect(scopeWorkletNode); scopeWorkletNode.connect(audioCtx.destination);
+                dummyGain = audioCtx.createGain(); dummyGain.gain.value = 0;
+                highpassFilter.connect(lowpassFilter); lowpassFilter.connect(scopeWorkletNode); scopeWorkletNode.connect(dummyGain); dummyGain.connect(audioCtx.destination);
             }
 
             try {
@@ -249,6 +271,17 @@
                 if (audioSource) audioSource.disconnect();
 
                 currentStream = await navigator.mediaDevices.getUserMedia({ audio: deviceId ? { deviceId: { exact: deviceId } } : true });
+                const audioTrack = currentStream.getAudioTracks()[0];
+                if (audioTrack) {
+                    audioTrack.onended = () => {
+                        if (!isPaused) {
+                            needReset = true;
+                            pauseMeasurement(true);
+                            infoText.textContent = "⚠️ Micro bị ngắt kết nối! Vui lòng bấm 'Làm mới' trước khi đo lại.";
+                            infoText.style.color = "#d93025";
+                        }
+                    };
+                }
                 audioSource = audioCtx.createMediaStreamSource(currentStream);
                 audioSource.connect(highpassFilter);
                 if (audioCtx.state === 'suspended') await audioCtx.resume();
@@ -271,11 +304,13 @@
         }
 
         startButton.addEventListener('click', () => initAudio());
-        micSelect.addEventListener('change', e => {
-            initAudio(e.target.value);
-            needReset = false; pauseMeasurement();
-            infoText.textContent = `Đã chuyển sang: ${e.target.options[e.target.selectedIndex].text}`;
-            recordIndex = 0; recordedData.fill(0); drawFrame(true);
+        micSelect.addEventListener('change', async e => {
+            const selectedLabel = e.target.options[e.target.selectedIndex].text;
+            await initAudio(e.target.value);
+            needReset = false; pauseMeasurement(true);
+            infoText.textContent = `Đã chuyển sang: ${selectedLabel}`;
+            infoText.style.color = "#007bff";
+            recordIndex = 0; if (recordedData) recordedData.fill(0); drawFrame(true);
         });
 
         function pauseMeasurement(forceStop = false) {
@@ -289,7 +324,10 @@
         }
 
         pauseButton.addEventListener('click', async () => {
-            if (needReset) return alert("Hệ thống Micro bị gián đoạn. Vui lòng bấm nút '3. Làm mới' để kết nối lại!");
+            if (needReset || !currentStream || currentStream.getAudioTracks().length === 0 || currentStream.getAudioTracks()[0].readyState === 'ended') {
+                needReset = true;
+                return alert("Hệ thống Micro bị gián đoạn. Vui lòng bấm nút '3. Làm mới' để kết nối lại!");
+            }
 
             if (isPaused) {
                 if (audioCtx && audioCtx.state === 'suspended') await audioCtx.resume();
@@ -305,12 +343,12 @@
 
         resetButton.addEventListener('click', async () => {
             pauseMeasurement();
-            if (needReset || !currentStream || currentStream.getAudioTracks()[0].readyState === 'ended') {
+            if (needReset || !currentStream || currentStream.getAudioTracks().length === 0 || currentStream.getAudioTracks()[0].readyState === 'ended') {
                 infoText.textContent = "Đang khởi động lại phần cứng Micro...";
                 await initAudio(micSelect.style.display !== 'none' ? micSelect.value : null);
             } else if (audioCtx && audioCtx.state === 'suspended') await audioCtx.resume();
             
-            needReset = false; lastDrawTime = performance.now(); recordIndex = 0; recordedData.fill(0);
+            needReset = false; lastDrawTime = performance.now(); recordIndex = 0; if (recordedData) recordedData.fill(0);
             isUserZoomed = false; detectedFrequency = 0; totalTimeOnScreen = 5 * (1.0 / 440); currentZoomY = 2.0;
             infoText.textContent = "Sẵn sàng (Bấm 'Đo / Dừng' để tiếp tục)"; infoText.style.color = "#007bff";
             drawFrame(true);
@@ -319,6 +357,33 @@
         saveButton.addEventListener('click', () => {
             const link = document.createElement('a'); link.download = 'DoThi_SongAm.png'; link.href = canvas.toDataURL('image/png'); link.click();
         });
+
+        function drawScaleBadge() {
+            const msPerDiv = parseFloat(((totalTimeOnScreen / 10) * 1000).toFixed(2)).toString().replace('.', ',');
+            const scaleLabel = `1 ô = ${msPerDiv} ms`;
+            canvasCtx.save();
+            canvasCtx.font = 'bold 13px Arial';
+            const textMetrics = canvasCtx.measureText(scaleLabel);
+            const boxPadX = 8, boxPadY = 5;
+            const boxW = textMetrics.width + boxPadX * 2;
+            const boxH = 14 + boxPadY * 2;
+            canvasCtx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            canvasCtx.strokeStyle = '#0056b3';
+            canvasCtx.lineWidth = 1.5;
+            canvasCtx.beginPath();
+            if (canvasCtx.roundRect) {
+                canvasCtx.roundRect(10, 10, boxW, boxH, 5);
+            } else {
+                canvasCtx.rect(10, 10, boxW, boxH);
+            }
+            canvasCtx.fill();
+            canvasCtx.stroke();
+            canvasCtx.fillStyle = '#0056b3';
+            canvasCtx.textAlign = 'left';
+            canvasCtx.textBaseline = 'middle';
+            canvasCtx.fillText(scaleLabel, 10 + boxPadX, 10 + boxH / 2);
+            canvasCtx.restore();
+        }
 
         function drawFrame(isReset = false) {
             if (!audioCtx) { canvasCtx.fillStyle = '#e6f7ff'; canvasCtx.fillRect(0, 0, canvas.width, canvas.height); return; }
@@ -357,32 +422,35 @@
             for(let i=0; i<=8; i++) if (i !== 4 && i !== 0) canvasCtx.fillText(parseFloat((maxY - i * valStep).toFixed(2)).toString().replace('.', ','), canvas.width/2 + 10, i * stepY);
             canvasCtx.fillText("0", canvas.width/2 + 8, canvas.height/2 + 15); canvasCtx.textBaseline = 'top'; canvasCtx.fillText("Biên độ", canvas.width/2 + 10, 10);
 
-            if (isReset || recordIndex === 0) return;
+            if (!isReset && recordIndex > 0) {
+                canvasCtx.save(); canvasCtx.beginPath(); canvasCtx.rect(0, 0, canvas.width, canvas.height); canvasCtx.clip();
+                canvasCtx.lineWidth = 3; canvasCtx.strokeStyle = '#ff0000'; canvasCtx.beginPath();
 
-            canvasCtx.save(); canvasCtx.beginPath(); canvasCtx.rect(0, 0, canvas.width, canvas.height); canvasCtx.clip();
-            canvasCtx.lineWidth = 3; canvasCtx.strokeStyle = '#ff0000'; canvasCtx.beginPath();
+                const samplesNeeded = Math.floor(totalTimeOnScreen * sampleRate);
+                const step = Math.max(1, Math.floor(samplesNeeded / (canvas.width * 2)));
+                const sliceWidth = (canvas.width / samplesNeeded) * step;
+                let x = 0, hasMoved = false, startIndex = recordIndex - samplesNeeded;
 
-            const samplesNeeded = Math.floor(totalTimeOnScreen * sampleRate);
-            const step = Math.max(1, Math.floor(samplesNeeded / (canvas.width * 2)));
-            const sliceWidth = (canvas.width / samplesNeeded) * step;
-            let x = 0, hasMoved = false, startIndex = recordIndex - samplesNeeded;
-
-            for (let i = startIndex; i < startIndex + samplesNeeded; i += step) {
-                if (i < 0 || i >= recordIndex) { x += sliceWidth; continue; }
-                let v = recordedData[i % recordedData.length];
-                if (step > 2) {
-                    let maxV = v, minV = v;
-                    for(let j = 1; j < step; j++) if (i + j < recordIndex) { let tv = recordedData[(i+j) % recordedData.length]; if(tv>maxV) maxV=tv; if(tv<minV) minV=tv; }
-                    let yMin = (-minV) * currentZoomY * (canvas.height/2) + (canvas.height/2);
-                    if (!hasMoved) { canvasCtx.moveTo(x, yMin); hasMoved = true; } else canvasCtx.lineTo(x, yMin);
-                    canvasCtx.lineTo(x, (-maxV) * currentZoomY * (canvas.height/2) + (canvas.height/2));
-                } else {
-                    let y = (-v) * currentZoomY * (canvas.height/2) + (canvas.height/2);
-                    if (!hasMoved) { canvasCtx.moveTo(x, y); hasMoved = true; } else canvasCtx.lineTo(x, y);
+                for (let i = startIndex; i < startIndex + samplesNeeded; i += step) {
+                    if (i < 0 || i >= recordIndex) { x += sliceWidth; continue; }
+                    let v = recordedData[i % recordedData.length];
+                    if (step > 2) {
+                        let maxV = v, minV = v;
+                        for(let j = 1; j < step; j++) if (i + j < recordIndex) { let tv = recordedData[(i+j) % recordedData.length]; if(tv>maxV) maxV=tv; if(tv<minV) minV=tv; }
+                        let yMin = (-minV) * currentZoomY * (canvas.height/2) + (canvas.height/2);
+                        if (!hasMoved) { canvasCtx.moveTo(x, yMin); hasMoved = true; } else canvasCtx.lineTo(x, yMin);
+                        canvasCtx.lineTo(x, (-maxV) * currentZoomY * (canvas.height/2) + (canvas.height/2));
+                    } else {
+                        let y = (-v) * currentZoomY * (canvas.height/2) + (canvas.height/2);
+                        if (!hasMoved) { canvasCtx.moveTo(x, y); hasMoved = true; } else canvasCtx.lineTo(x, y);
+                    }
+                    x += sliceWidth; if (x > canvas.width) break;
                 }
-                x += sliceWidth; if (x > canvas.width) break;
+                canvasCtx.stroke(); canvasCtx.restore();
             }
-            canvasCtx.stroke(); canvasCtx.restore();
+
+            // Hiển thị thông số 1 ô = ... ms ở góc trên bên trái màn hình
+            drawScaleBadge();
         }
 
         function draw(timestamp) {
@@ -390,6 +458,29 @@
             if (!timestamp) timestamp = performance.now();
             let elapsed = timestamp - lastDrawTime, interval = 1000 / targetFPS;
             if (elapsed > interval) { lastDrawTime = timestamp - (elapsed % interval); drawFrame(); }
+        }
+
+        // =================================================================
+        // 3. CƠ CHẾ TỰ ĐỘNG CẬP NHẬT PHIÊN BẢN MỚI (PWA AUTO-UPDATE)
+        // =================================================================
+        let swRegistration = null;
+        if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
+                    .then(reg => {
+                        swRegistration = reg;
+                        reg.update().catch(() => {});
+                    })
+                    .catch(err => console.warn('Service Worker:', err));
+            });
+
+            let isReloadingForUpdate = false;
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (!isReloadingForUpdate && isPaused) {
+                    isReloadingForUpdate = true;
+                    window.location.reload();
+                }
+            });
         }
     </script>
 </body>
