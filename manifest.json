@@ -1,0 +1,15 @@
+{
+  "name": "Dao động ký - Sóng âm",
+  "short_name": "Dao động ký",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#e6f7ff",
+  "theme_color": "#f0f4f8",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "192x192 512x512",
+      "type": "image/png"
+    }
+  ]
+}
