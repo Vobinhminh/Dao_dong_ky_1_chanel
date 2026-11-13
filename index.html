@@ -125,7 +125,7 @@
         const workletCode = `
         class ScopeWorkletProcessor extends AudioWorkletProcessor {
             process(inputs, outputs, parameters) {
-                const inputChannel = inputs[0][0];
+                const inputChannel = inputs[0] && inputs[0][0];
                 if (inputChannel) this.port.postMessage(inputChannel);
                 return true;
             }
@@ -154,6 +154,11 @@
         let detectedFrequency = 0, lastCorrelateTime = 0, isUserZoomed = false;
         let totalTimeOnScreen = 5 * (1.0 / 440), currentZoomY = 2.0;
         let targetFPS = 60, lastDrawTime = performance.now();
+
+        // Trạng thái ẩn/hiện nhãn tỉ lệ xích (1 ô = 1,xxxx ms) tại góc trên bên trái
+        let showScaleBadge = false;
+        let scaleBadgeHitBox = { x: 0, y: 0, w: 175, h: 52 };
+        let isPinching = false;
 
         document.addEventListener('visibilitychange', () => {
             if (document.hidden && !isPaused) {
@@ -186,6 +191,7 @@
 
         let startDuration, startZoomY, initialPinchDistX, initialPinchDistY;
         canvas.addEventListener('touchstart', e => {
+            if (e.touches.length >= 2) isPinching = true;
             if (e.touches.length === 2 && isPaused) {
                 e.preventDefault();
                 initialPinchDistX = Math.max(Math.abs(e.touches[0].clientX - e.touches[1].clientX), 10);
@@ -204,6 +210,12 @@
             }
         }, {passive: false});
 
+        canvas.addEventListener('touchend', e => {
+            if (e.touches.length === 0 && isPinching) {
+                setTimeout(() => { isPinching = false; }, 120);
+            }
+        });
+
         canvas.addEventListener('wheel', e => {
             if (isPaused) {
                 e.preventDefault();
@@ -215,6 +227,24 @@
                 drawFrame();
             }
         }, {passive: false});
+
+        // Chạm / click đúng vị trí góc trên bên trái để bật/tắt nhãn "1 ô = 1,xxxx ms"
+        canvas.addEventListener('click', e => {
+            if (!audioCtx || isPinching) return;
+            const rect = canvas.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
+
+            if (
+                clickX >= scaleBadgeHitBox.x &&
+                clickX <= scaleBadgeHitBox.x + scaleBadgeHitBox.w &&
+                clickY >= scaleBadgeHitBox.y &&
+                clickY <= scaleBadgeHitBox.y + scaleBadgeHitBox.h
+            ) {
+                showScaleBadge = !showScaleBadge;
+                drawFrame();
+            }
+        });
 
         fullscreenButton.addEventListener('click', () => {
             if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => alert("Lỗi toàn màn hình. Hãy xoay ngang điện thoại nhé!"));
@@ -349,7 +379,7 @@
             } else if (audioCtx && audioCtx.state === 'suspended') await audioCtx.resume();
             
             needReset = false; lastDrawTime = performance.now(); recordIndex = 0; if (recordedData) recordedData.fill(0);
-            isUserZoomed = false; detectedFrequency = 0; totalTimeOnScreen = 5 * (1.0 / 440); currentZoomY = 2.0;
+            isUserZoomed = false; showScaleBadge = false; detectedFrequency = 0; totalTimeOnScreen = 5 * (1.0 / 440); currentZoomY = 2.0;
             infoText.textContent = "Sẵn sàng (Bấm 'Đo / Dừng' để tiếp tục)"; infoText.style.color = "#007bff";
             drawFrame(true);
         });
@@ -359,7 +389,7 @@
         });
 
         function drawScaleBadge() {
-            const msPerDiv = parseFloat(((totalTimeOnScreen / 10) * 1000).toFixed(2)).toString().replace('.', ',');
+            const msPerDiv = ((totalTimeOnScreen / 10) * 1000).toFixed(4).replace('.', ',');
             const scaleLabel = `1 ô = ${msPerDiv} ms`;
             canvasCtx.save();
             canvasCtx.font = 'bold 13px Arial';
@@ -367,7 +397,19 @@
             const boxPadX = 8, boxPadY = 5;
             const boxW = textMetrics.width + boxPadX * 2;
             const boxH = 14 + boxPadY * 2;
-            canvasCtx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            scaleBadgeHitBox = {
+                x: 0,
+                y: 0,
+                w: Math.max(175, boxW + 24),
+                h: Math.max(52, boxH + 20)
+            };
+
+            if (!showScaleBadge) {
+                canvasCtx.restore();
+                return;
+            }
+
+            canvasCtx.fillStyle = 'rgba(255, 255, 255, 0.92)';
             canvasCtx.strokeStyle = '#0056b3';
             canvasCtx.lineWidth = 1.5;
             canvasCtx.beginPath();
@@ -449,7 +491,7 @@
                 canvasCtx.stroke(); canvasCtx.restore();
             }
 
-            // Hiển thị thông số 1 ô = ... ms ở góc trên bên trái màn hình
+            // Hiển thị thông số 1 ô = 1,xxxx ms ở góc trên bên trái khi người dùng chạm vào
             drawScaleBadge();
         }
 
