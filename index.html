@@ -2,14 +2,14 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#f0f4f8">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="Dao động ký">
     <meta name="application-name" content="Dao động ký">
-    <title>Dao động ký (Oscilloscope) - Tích hợp AudioWorklet</title>
+    <title>Dao động ký (Oscilloscope)</title>
     
     <!-- KHAI BÁO ICON & MANIFEST -->
     <link rel="manifest" href="manifest.json">
@@ -17,11 +17,11 @@
     <link rel="apple-touch-icon" href="icon.png">
 
     <style>
-        html, body { margin: 0; padding: 0; width: 100%; height: 100%; background-color: #e6f7ff; font-family: sans-serif; overflow: hidden; display: flex; flex-direction: column; }
-        .top-bar { display: flex; background-color: #f0f4f8; border-bottom: 3px solid #000; z-index: 10; padding: 8px; gap: 8px; align-items: stretch; }
+        html, body { margin: 0; padding: 0; width: 100%; height: 100%; background-color: #e6f7ff; font-family: sans-serif; overflow: hidden; overscroll-behavior: none; display: flex; flex-direction: column; }
+        .top-bar { display: flex; background-color: #f0f4f8; border-bottom: 3px solid #000; z-index: 10; padding: 8px; gap: 8px; align-items: stretch; touch-action: manipulation; }
         .controls-wrapper { display: flex; flex-direction: column; flex-grow: 1; gap: 6px; justify-content: center; }
         .btn-group { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; width: 100%; }
-        .custom-select { padding: 6px; font-size: 13px; font-weight: bold; color: #0056b3; border-radius: 6px; border: 1px solid #ccc; background-color: #fff; width: 100%; cursor: pointer; outline: none; box-sizing: border-box; }
+        .custom-select { padding: 6px; font-size: 13px; font-weight: bold; color: #0056b3; border-radius: 6px; border: 1px solid #ccc; background-color: #fff; width: 100%; cursor: pointer; outline: none; box-sizing: border-box; touch-action: manipulation; }
         
         /* KHUNG CHỨA QR CODE */
         .qr-container { display: flex; gap: 6px; flex-shrink: 0; }
@@ -33,7 +33,7 @@
         @media (max-width: 500px) { .btn-group { grid-template-columns: 1fr 1fr; } #fullscreenButton { grid-column: span 2; } #settingsRow { flex-direction: column; } }
 
         .info-panel { font-weight: bold; font-size: 13px; color: #d93025; background: #fff; padding: 6px; border-radius: 6px; border: 1px solid #ccc; text-align: center; flex-grow: 1; display: flex; align-items: center; justify-content: center; }
-        button { padding: 8px 4px; font-size: 13px; font-weight: bold; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 6px; transition: background-color 0.2s; width: 100%; box-sizing: border-box; }
+        button { padding: 8px 4px; font-size: 13px; font-weight: bold; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 6px; transition: background-color 0.2s; width: 100%; box-sizing: border-box; touch-action: manipulation; }
         button:hover { filter: brightness(0.9); }
         button:disabled { background-color: #999; cursor: not-allowed; }
         #pauseButton { background-color: #28a745; }
@@ -64,7 +64,7 @@
                     <option value="slow">Tốc độ: Chậm</option>
                 </select>
             </div>
-            <div class="info-panel" id="infoText">Đang chờ bật Micro... (Tích hợp AudioWorklet)</div>
+            <div class="info-panel" id="infoText">Đang chờ bật Micro... </div>
         </div>
         
         <div class="qr-container" id="qrContainer">
@@ -167,7 +167,6 @@
                 infoText.textContent = "⚠️ Bị gián đoạn! Vui lòng bấm 'Làm mới' trước khi đo lại.";
                 infoText.style.color = "#d93025";
             } else if (!document.hidden && isPaused && swRegistration) {
-                // Tự động kiểm tra bản cập nhật mới khi người dùng quay lại ứng dụng
                 swRegistration.update().catch(() => {});
             }
         });
@@ -440,29 +439,89 @@
 
             if (!isUserZoomed) totalTimeOnScreen = Math.max(0.002, Math.min(5 * (1.0 / (detectedFrequency > 0 ? detectedFrequency : 440)), 2.4));
 
-            canvasCtx.fillStyle = '#e6f7ff'; canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
-            canvasCtx.strokeStyle = '#b3e0ff'; canvasCtx.lineWidth = 1;
-            
-            const stepX = canvas.width / 10, stepY = canvas.height / 8;
+            canvasCtx.fillStyle = '#e6f7ff';
+            canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const stepX = canvas.width / 10;
+            const stepY = canvas.height / 8;
+            const centerX = Math.round(canvas.width / 2) + 0.5;
+            const centerY = Math.round(canvas.height / 2) + 0.5;
+
+            // Lưới tọa độ 10x8 căn chuẩn điểm ảnh để các ô có độ dày và khoảng cách đồng nhất
+            canvasCtx.strokeStyle = '#b3e0ff';
+            canvasCtx.lineWidth = 1;
             canvasCtx.beginPath();
-            for(let i=0; i<=10; i++) { canvasCtx.moveTo(i * stepX, 0); canvasCtx.lineTo(i * stepX, canvas.height); }
-            for(let i=0; i<=8; i++) { canvasCtx.moveTo(0, i * stepY); canvasCtx.lineTo(canvas.width, i * stepY); }
+            for (let i = 0; i <= 10; i++) {
+                const gx = Math.round(i * stepX) + 0.5;
+                canvasCtx.moveTo(gx, 0);
+                canvasCtx.lineTo(gx, canvas.height);
+            }
+            for (let i = 0; i <= 8; i++) {
+                const gy = Math.round(i * stepY) + 0.5;
+                canvasCtx.moveTo(0, gy);
+                canvasCtx.lineTo(canvas.width, gy);
+            }
             canvasCtx.stroke();
 
-            canvasCtx.lineWidth = 2; canvasCtx.strokeStyle = '#000000'; canvasCtx.beginPath();
-            canvasCtx.moveTo(0, canvas.height / 2); canvasCtx.lineTo(canvas.width, canvas.height / 2);
-            canvasCtx.moveTo(canvas.width / 2, 0); canvasCtx.lineTo(canvas.width / 2, canvas.height);
-            for(let i=0; i<=10; i++) { canvasCtx.moveTo(i * stepX, canvas.height/2 - 5); canvasCtx.lineTo(i * stepX, canvas.height/2 + 5); }
-            for(let i=0; i<=8; i++) { canvasCtx.moveTo(canvas.width/2 - 5, i * stepY); canvasCtx.lineTo(canvas.width/2 + 5, i * stepY); }
+            // Hai trục chính và vạch chia đối xứng
+            canvasCtx.lineWidth = 2;
+            canvasCtx.strokeStyle = '#000000';
+            canvasCtx.beginPath();
+            canvasCtx.moveTo(0, centerY);
+            canvasCtx.lineTo(canvas.width, centerY);
+            canvasCtx.moveTo(centerX, 0);
+            canvasCtx.lineTo(centerX, canvas.height);
+            for (let i = 1; i < 10; i++) {
+                if (i === 5) continue;
+                const gx = Math.round(i * stepX) + 0.5;
+                canvasCtx.moveTo(gx, centerY - 5);
+                canvasCtx.lineTo(gx, centerY + 5);
+            }
+            for (let i = 1; i < 8; i++) {
+                if (i === 4) continue;
+                const gy = Math.round(i * stepY) + 0.5;
+                canvasCtx.moveTo(centerX - 5, gy);
+                canvasCtx.lineTo(centerX + 5, gy);
+            }
             canvasCtx.stroke();
 
-            canvasCtx.fillStyle = '#000000'; canvasCtx.font = 'bold 13px Arial'; canvasCtx.textAlign = 'center'; canvasCtx.textBaseline = 'top';
-            for(let i=0; i<=10; i++) if (i !== 5) canvasCtx.fillText(parseFloat(((i - 5) * (totalTimeOnScreen / 10) * 1000).toFixed(2)).toString().replace('.', ','), i * stepX, canvas.height/2 + 10);
-            canvasCtx.textAlign = 'right'; canvasCtx.fillText("t (ms)", canvas.width - 10, canvas.height / 2 - 25);
-            canvasCtx.textAlign = 'left'; canvasCtx.textBaseline = 'middle';
-            const maxY = 1.0 / currentZoomY, valStep = (maxY * 2) / 8;
-            for(let i=0; i<=8; i++) if (i !== 4 && i !== 0) canvasCtx.fillText(parseFloat((maxY - i * valStep).toFixed(2)).toString().replace('.', ','), canvas.width/2 + 10, i * stepY);
-            canvasCtx.fillText("0", canvas.width/2 + 8, canvas.height/2 + 15); canvasCtx.textBaseline = 'top'; canvasCtx.fillText("Biên độ", canvas.width/2 + 10, 10);
+            // Nhãn số trục thời gian t (ms) chia bước nhảy đều nhau, không bị cắt ở 2 viền
+            const isSmallScreen = canvas.width < 500;
+            canvasCtx.fillStyle = '#000000';
+            canvasCtx.font = isSmallScreen ? 'bold 11px Arial' : 'bold 12px Arial';
+            canvasCtx.textAlign = 'center';
+            canvasCtx.textBaseline = 'top';
+
+            const rawStepTimeMs = (totalTimeOnScreen / 10) * 1000;
+            const timeDecimals = rawStepTimeMs < 1 ? 3 : 2;
+            const uniformStepTimeMs = parseFloat(rawStepTimeMs.toFixed(timeDecimals));
+
+            for (let i = 1; i <= 9; i++) {
+                if (i === 5) continue;
+                const gx = Math.round(i * stepX);
+                const valMs = parseFloat(((i - 5) * uniformStepTimeMs).toFixed(timeDecimals));
+                canvasCtx.fillText(valMs.toString().replace('.', ','), gx, centerY + 9);
+            }
+            canvasCtx.textAlign = 'right';
+            canvasCtx.fillText("t (ms)", canvas.width - 8, centerY - 22);
+
+            // Nhãn số trục Biên độ chia bước nhảy đều nhau, đối xứng 3 mốc trên / 3 mốc dưới
+            canvasCtx.textAlign = 'left';
+            canvasCtx.textBaseline = 'middle';
+            const maxY = 1.0 / currentZoomY;
+            const rawStepY = maxY / 4;
+            const yDecimals = rawStepY < 0.2 ? 3 : 2;
+            const uniformStepY = parseFloat(rawStepY.toFixed(yDecimals));
+
+            for (let i = 1; i <= 7; i++) {
+                if (i === 4) continue;
+                const gy = Math.round(i * stepY);
+                const valY = parseFloat(((4 - i) * uniformStepY).toFixed(yDecimals));
+                canvasCtx.fillText(valY.toString().replace('.', ','), centerX + 9, gy);
+            }
+            canvasCtx.fillText("0", centerX + 8, centerY + 14);
+            canvasCtx.textBaseline = 'top';
+            canvasCtx.fillText("Biên độ", centerX + 9, 8);
 
             if (!isReset && recordIndex > 0) {
                 canvasCtx.save(); canvasCtx.beginPath(); canvasCtx.rect(0, 0, canvas.width, canvas.height); canvasCtx.clip();
